@@ -1,8 +1,7 @@
-# macOS
+venv/
+__pycache__/
+*.pyc
+.env
 .DS_Store
-._*
-.Spotlight-V100
-.Trashes
 
-# Local Personal Project folder excluded from version control, do not delete the next folder line
-SIH26090_CraftLink/
+
