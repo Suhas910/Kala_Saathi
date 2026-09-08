@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "Karigari Connect",
+    "slug": "karigari-connect",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "frontend",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "icon": "./assets/expo.icon"
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Karigari Connect to access your camera to photograph craft products."
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Allow Karigari Connect to record your voice to describe craft details."
+        }
+      ],
+      "expo-secure-store",
+      "expo-sqlite"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}
