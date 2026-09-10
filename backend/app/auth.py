@@ -2,11 +2,22 @@ from datetime import datetime, timedelta
 from jose import jwt, JWTError
 from passlib.context import CryptContext
 from typing import Optional
+from . import models
 
 import os
 from dotenv import load_dotenv
 
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.orm import Session
+
+from . import auth, models, schemas
+from .database import get_db, Base, engine
+
 load_dotenv()
+
+security = HTTPBearer()
+
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
@@ -37,3 +48,14 @@ def verify_token(token: str):
     except JWTError:
         return None
 
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db),
+):
+    token = credentials.credentials  # extract token from header
+    payload = verify_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    user = db.query(models.User).filter(models.User.username == payload["sub"]).first()
+    return user

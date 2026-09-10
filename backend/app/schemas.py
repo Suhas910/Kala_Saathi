@@ -10,3 +10,8 @@ class UserRegister(BaseModel):
 class UserLogin(BaseModel):
     username: str
     password: str
+
+class ProductCreate(BaseModel):
+    name: str
+    description: str
+    price: float

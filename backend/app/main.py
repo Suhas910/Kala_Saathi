@@ -5,22 +5,10 @@ from sqlalchemy.orm import Session
 from . import auth, models, schemas
 from .database import get_db, Base, engine
 
+from .routers import products, images
+
 Base.metadata.create_all(bind=engine)
 app = FastAPI()
-
-security = HTTPBearer()
-
-def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db),
-):
-    token = credentials.credentials  # extract token from header
-    payload = auth.verify_token(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-
-    user = db.query(models.User).filter(models.User.username == payload["sub"]).first()
-    return user
 
 @app.get("/")
 async def read_root():
@@ -60,3 +48,6 @@ def login(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
     # generate token with user info inside
     token = auth.create_token({"sub": user.username, "id": user.user_id})
     return {"access_token": token, "token_type": "bearer"}
+
+app.include_router(products.router)
+app.include_router(images.router)
