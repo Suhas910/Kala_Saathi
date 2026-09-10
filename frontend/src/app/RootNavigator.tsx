@@ -1,6 +1,7 @@
 // src/app/RootNavigator
 
 import React from 'react';
+import { View, Text } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuthStore } from '../store/authStore';
@@ -24,11 +25,21 @@ export default function RootNavigator() {
         ) : role === 'artisan' ? (
           // Artisan Flow
           <Stack.Screen name="ArtisanStack" component={ArtisanStack} />
-        ) : (
+        ) : role === 'coordinator' ? (
           // Coordinator Flow
           <Stack.Screen name="CoordinatorStack" component={CoordinatorStack} />
+        ) : (
+          <Stack.Screen name="RoleError" component={RoleErrorScreen} />
         )}
       </Stack.Navigator>
     </NavigationContainer>
+  );
+}
+
+function RoleErrorScreen() {
+  return (
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+      <Text>Account role not recognized. Please sign in again or contact support.</Text>
+    </View>
   );
 }

@@ -14,13 +14,18 @@ export default function ImageReviewScreen() {
   const { draftId } = route.params ?? {};
 
   const [jobId, setJobId] = useState<string | null>(null);
+  const [kickoffError, setKickoffError] = useState<string | null>(null);
 
   // Kick off image analysis once, on screen load
   useEffect(() => {
     if (!draftId) return;
     (async () => {
-      const result = await service.requestImageAnalysis(draftId, { media_id: 'media_placeholder' });
-      setJobId(result.job_id);
+      try {
+        const result = await service.requestImageAnalysis(draftId, { media_id: 'media_placeholder' });
+        setJobId(result.job_id);
+      } catch (err) {
+        setKickoffError('Could not start photo processing. Check connection and try again.');
+      }
     })();
   }, [draftId]);
 
@@ -32,8 +37,8 @@ export default function ImageReviewScreen() {
     refetchInterval: (query) => (query.state.data?.status === 'complete' ? false : 1500),
   });
 
-  const isProcessing = !job || job.status === 'processing' || job.status === 'queued';
-  const isFailed = job?.status === 'failed';
+  const isProcessing = !kickoffError && (!job || job.status === 'processing' || job.status === 'queued');
+  const isFailed = kickoffError || job?.status === 'failed';
 
   const handleRetake = () => {
     navigation.goBack();

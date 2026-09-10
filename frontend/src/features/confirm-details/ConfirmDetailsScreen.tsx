@@ -22,27 +22,63 @@ export default function ConfirmDetailsScreen() {
 
   const [result, setResult] = useState<CatalogueResult | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [editedFields, setEditedFields] = useState<Record<string, any>>({});
   const [confirmedFields, setConfirmedFields] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     (async () => {
-      const res = await service.requestCatalogueGeneration(draftId, {
-        transcript_id: transcriptId,
-        image_media_ids: [],
-        confirmed_facts: {},
-        taxonomy_version: '0.1.0',
-      });
-      setResult(res);
-      setLoading(false);
+      setLoading(true);
+      setLoadError(null);
+      try {
+        const res = await service.requestCatalogueGeneration(draftId, {
+          transcript_id: transcriptId,
+          image_media_ids: [],
+          confirmed_facts: {},
+          taxonomy_version: '0.1.0',
+        });
+        setResult(res);
+      } catch (err) {
+        // Contract: CATALOGUE_SCHEMA_INVALID -> "Keep the draft, show retry."
+        setLoadError('Could not generate catalogue details. Your draft is safe — try again.');
+      } finally {
+        setLoading(false);
+      }
     })();
   }, [draftId, transcriptId]);
 
-  if (loading || !result) {
+  if (loading) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.hint}>Generating your product details…</Text>
+      </View>
+    );
+  }
+
+  if (loadError || !result) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.hint}>{loadError ?? 'Something went wrong loading your draft.'}</Text>
+        <Button
+          mode="contained"
+          onPress={() => {
+            setLoading(true);
+            setLoadError(null);
+            service.requestCatalogueGeneration(draftId, {
+              transcript_id: transcriptId,
+              image_media_ids: [],
+              confirmed_facts: {},
+              taxonomy_version: '0.1.0',
+            }).then(setResult).catch(() => setLoadError('Could not generate catalogue details. Your draft is safe — try again.')).finally(() => setLoading(false));
+          }}
+          buttonColor={colors.primary}
+          style={styles.submitBtn}
+        >
+          Retry
+        </Button>
       </View>
     );
   }
@@ -71,6 +107,8 @@ export default function ConfirmDetailsScreen() {
   const allNeedsConfirmationHandled = needs_confirmation.every((key) => confirmedFields.has(key));
 
   const handleSubmit = async () => {
+    setSubmitting(true);
+    setSubmitError(null);
     const corrections = Object.entries(editedFields).map(([field, new_value]) => ({
       field,
       old_value: (catalogue as any)[field],
@@ -78,14 +116,21 @@ export default function ConfirmDetailsScreen() {
       source: 'artisan',
     }));
 
-    await service.confirmListing(draftId, {
-      catalogue,
-      confirmed_fields: fieldsToConfirm.map((f) => f.key),
-      corrections,
-    });
+    try {
+      await service.confirmListing(draftId, {
+        catalogue,
+        confirmed_fields: fieldsToConfirm.map((f) => f.key),
+        corrections,
+      });
 
-    // @ts-expect-error
-    navigation.navigate('Price', { draftId });
+      // @ts-expect-error
+      navigation.navigate('Price', { draftId });
+    } catch (err) {
+      // Contract: CATALOGUE_SCHEMA_INVALID -> keep the draft, show retry. Never lose edits on failure.
+      setSubmitError('Could not save your confirmation. Your edits are kept — try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -132,12 +177,14 @@ export default function ConfirmDetailsScreen() {
       <Button
         mode="contained"
         onPress={handleSubmit}
-        disabled={!allNeedsConfirmationHandled}
+        disabled={!allNeedsConfirmationHandled || submitting}
+        loading={submitting}
         buttonColor={colors.primary}
         style={styles.submitBtn}
       >
         Continue to Price
       </Button>
+      {submitError && <Text style={styles.errorText}>{submitError}</Text>}
     </ScrollView>
   );
 }
@@ -155,4 +202,5 @@ const styles = StyleSheet.create({
   confirmChip: { marginTop: spacing.sm, alignSelf: 'flex-start' },
   submitBtn: { marginTop: spacing.md, minHeight: spacing.tapTarget, justifyContent: 'center' },
   hint: { color: colors.text, marginTop: spacing.md, textAlign: 'center' },
+  errorText: { color: colors.error, marginTop: spacing.sm, textAlign: 'center' },
 });
