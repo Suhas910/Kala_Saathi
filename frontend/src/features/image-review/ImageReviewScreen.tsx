@@ -1,17 +1,20 @@
 // src/features/image-review/ImageReviewScreen.tsx
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Image, ScrollView } from 'react-native';
-import { Text, Button, ActivityIndicator, Chip } from 'react-native-paper';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { Text, Button, Chip } from 'react-native-paper';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { ArtisanStackParamList } from '../../types/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { service } from '../../services';
+import { getDraft, saveDraft } from '../../services/database';
 import { colors, spacing } from '../../theme';
+import { ProcessingIndicator } from '../../components';
 
 export default function ImageReviewScreen() {
-  const navigation = useNavigation();
-  const route = useRoute();
-  // @ts-expect-error — typed nav params land once types/navigation.ts is filled
-  const { draftId } = route.params ?? {};
+  const navigation = useNavigation<NativeStackNavigationProp<ArtisanStackParamList>>();
+  const route = useRoute<RouteProp<ArtisanStackParamList, 'ImageReview'>>();
+  const { draftId } = route.params;
 
   const [jobId, setJobId] = useState<string | null>(null);
   const [kickoffError, setKickoffError] = useState<string | null>(null);
@@ -37,6 +40,29 @@ export default function ImageReviewScreen() {
     refetchInterval: (query) => (query.state.data?.status === 'complete' ? false : 1500),
   });
 
+  // Persist imageAccepted flag on successful job completion
+  useEffect(() => {
+    if (job?.status === 'complete' && draftId) {
+      (async () => {
+        try {
+          const existing = await getDraft(draftId);
+          await saveDraft({
+            id: draftId,
+            listing_id: existing?.listing_id ?? draftId,
+            state: existing?.state ?? 'draft',
+            preferred_language: existing?.preferred_language ?? 'kn',
+            payload: {
+              ...(existing?.payload ?? {}),
+              imageAccepted: true,
+            },
+          });
+        } catch (dbErr) {
+          console.error('Failed to update draft payload in ImageReview', dbErr);
+        }
+      })();
+    }
+  }, [job?.status, draftId]);
+
   const isProcessing = !kickoffError && (!job || job.status === 'processing' || job.status === 'queued');
   const isFailed = kickoffError || job?.status === 'failed';
 
@@ -44,18 +70,27 @@ export default function ImageReviewScreen() {
     navigation.goBack();
   };
 
-  const handleContinue = () => {
-    // @ts-expect-error — same as above, typed later
+  const handleContinue = async () => {
+    try {
+      const existing = await getDraft(draftId);
+      await saveDraft({
+        id: draftId,
+        listing_id: existing?.listing_id ?? draftId,
+        state: existing?.state ?? 'draft',
+        preferred_language: existing?.preferred_language ?? 'kn',
+        payload: {
+          ...(existing?.payload ?? {}),
+          imageAccepted: true,
+        },
+      });
+    } catch (dbErr) {
+      console.error('Failed to update draft payload in handleContinue', dbErr);
+    }
     navigation.navigate('Speak', { draftId });
   };
 
   if (isProcessing) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.hint}>Checking photo quality and enhancing image…</Text>
-      </View>
-    );
+    return <ProcessingIndicator hint="Checking photo quality and enhancing image…" />;
   }
 
   if (isFailed) {

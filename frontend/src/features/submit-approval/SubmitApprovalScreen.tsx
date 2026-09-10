@@ -1,9 +1,12 @@
 // src/features/submit-approval/SubmitApprovalScreen.tsx
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, Button, Checkbox, Card } from 'react-native-paper';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { ArtisanStackParamList } from '../../types/navigation';
 import { service } from '../../services';
+import { getDraft } from '../../services/database';
 import { colors, spacing } from '../../theme';
 
 // Checklist items mirror the contract's actual gate conditions before awaiting_approval:
@@ -15,15 +18,47 @@ const CHECKLIST = [
   { key: 'claims', label: 'No unverified sensitive claims pending' },
 ];
 
-export default function SubmitApprovalScreen() {
-  const navigation = useNavigation();
-  const route = useRoute();
-  // @ts-expect-error — typed nav params land once types/navigation.ts is filled
-  const { draftId } = route.params ?? {};
+interface DraftPayload {
+  catalogueConfirmed?: boolean;
+  imageAccepted?: boolean;
+  priceReviewed?: boolean;
+}
 
+export default function SubmitApprovalScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<ArtisanStackParamList>>();
+  const route = useRoute<RouteProp<ArtisanStackParamList, 'SubmitApproval'>>();
+  const { draftId } = route.params;
+
+  const [draftPayload, setDraftPayload] = useState<DraftPayload>({});
+  const [noUnverifiedClaims, setNoUnverifiedClaims] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!draftId) return;
+    (async () => {
+      try {
+        const draft = await getDraft(draftId);
+        if (draft?.payload) {
+          setDraftPayload(draft.payload);
+        }
+      } catch (err) {
+        console.error('Failed to load draft payload in SubmitApprovalScreen', err);
+      }
+
+      try {
+        const listing = await service.getListing(draftId);
+        const claims = listing.claims ?? [];
+        const verifiedOrNone = claims.every(
+          (c) => !(c.asserted_by_artisan && !c.coordinator_verified)
+        );
+        setNoUnverifiedClaims(verifiedOrNone);
+      } catch (err) {
+        console.error('Failed to load listing claims in SubmitApprovalScreen', err);
+      }
+    })();
+  }, [draftId]);
 
   const handleSubmit = async () => {
     setSubmitting(true);
@@ -41,8 +76,22 @@ export default function SubmitApprovalScreen() {
   };
 
   const handleDone = () => {
-    // @ts-expect-error
     navigation.navigate('MyListings');
+  };
+
+  const isChecked = (key: string) => {
+    switch (key) {
+      case 'catalogue':
+        return !!draftPayload.catalogueConfirmed;
+      case 'image':
+        return !!draftPayload.imageAccepted;
+      case 'price':
+        return !!draftPayload.priceReviewed;
+      case 'claims':
+        return noUnverifiedClaims;
+      default:
+        return false;
+    }
   };
 
   if (submitted) {
@@ -68,14 +117,12 @@ export default function SubmitApprovalScreen() {
 
       <Card style={styles.checklistCard}>
         <Card.Content>
-          {/* TODO: checklist below is a static preview, not wired to real draft/listing state yet.
-              Contract: backend re-checks all these conditions server-side on submitForApproval and
-              will reject via LISTING_STATE_INVALID if any fail — this UI should eventually read the
-              actual confirmation/image/price/claim status from the draft rather than always showing
-              "checked". Left as-is for demo, but don't treat these checkmarks as ground truth. */}
           {CHECKLIST.map((item) => (
             <View key={item.key} style={styles.checklistRow}>
-              <Checkbox status="checked" color={colors.success} />
+              <Checkbox
+                status={isChecked(item.key) ? 'checked' : 'unchecked'}
+                color={colors.success}
+              />
               <Text style={styles.checklistLabel}>{item.label}</Text>
             </View>
           ))}

@@ -2,16 +2,18 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, Button, Card, ActivityIndicator } from 'react-native-paper';
-import { useRoute, useNavigation } from '@react-navigation/native';
+import { useRoute, useNavigation, type RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { CoordinatorStackParamList } from '../../types/navigation';
 import { colors, spacing } from '../../theme';
 import type { ExportResult } from '../../types/contracts';
 import { service } from '../../services';
+import { ErrorRetryCard } from '../../components';
 
 export default function PublishExportScreen() {
-  const route = useRoute();
-  const navigation = useNavigation();
-  // @ts-expect-error — typed nav params later
-  const { listingId = 'mock_listing_123' } = route.params ?? {};
+  const navigation = useNavigation<NativeStackNavigationProp<CoordinatorStackParamList>>();
+  const route = useRoute<RouteProp<CoordinatorStackParamList, 'PublishExport'>>();
+  const { listingId } = route.params;
 
   const [exportResult, setExportResult] = useState<ExportResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -59,14 +61,12 @@ export default function PublishExportScreen() {
       )}
 
       {exportError && !loading && (
-        <Card style={styles.card}>
-          <Card.Content>
-            <Text style={styles.errorText}>{exportError}</Text>
-            <Button mode="contained" onPress={handleExport} buttonColor={colors.primary} style={styles.btn}>
-              Retry Export
-            </Button>
-          </Card.Content>
-        </Card>
+        <ErrorRetryCard
+          asCard
+          errorText={exportError}
+          onRetry={handleExport}
+          retryLabel="Retry Export"
+        />
       )}
 
       {exportResult && (

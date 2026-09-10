@@ -1,19 +1,22 @@
 // src/features/price/PriceScreen.tsx
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
-import { Text, Button, ActivityIndicator, Card } from 'react-native-paper';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { Text, Button, Card } from 'react-native-paper';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { ArtisanStackParamList } from '../../types/navigation';
 import { service } from '../../services';
+import { getDraft, saveDraft } from '../../services/database';
 import { colors, spacing } from '../../theme';
 import type { PriceResult } from '../../types/contracts';
+import { ProcessingIndicator, ErrorRetryCard } from '../../components';
 
 const paiseToRupees = (paise: number) => `₹${(paise / 100).toLocaleString('en-IN')}`;
 
 export default function PriceScreen() {
-  const navigation = useNavigation();
-  const route = useRoute();
-  // @ts-expect-error — typed nav params land once types/navigation.ts is filled
-  const { draftId } = route.params ?? {};
+  const navigation = useNavigation<NativeStackNavigationProp<ArtisanStackParamList>>();
+  const route = useRoute<RouteProp<ArtisanStackParamList, 'Price'>>();
+  const { draftId } = route.params;
 
   const [price, setPrice] = useState<PriceResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -24,6 +27,7 @@ export default function PriceScreen() {
       setLoading(true);
       setPriceError(null);
       try {
+        // TODO: Replace hardcoded payload with real confirmed catalogue values from draftStore
         // (material_cost_inr, labour_hours, state_code, skill_level, techniques) once ConfirmDetailsScreen
         // persists them. Currently static — works for demo, wrong once real drafts vary.
         const result = await service.requestPrice(draftId, {
@@ -35,6 +39,24 @@ export default function PriceScreen() {
           comparables: [],
         });
         setPrice(result);
+
+        if (result.status === 'available') {
+          try {
+            const existing = await getDraft(draftId);
+            await saveDraft({
+              id: draftId,
+              listing_id: existing?.listing_id ?? draftId,
+              state: existing?.state ?? 'draft',
+              preferred_language: existing?.preferred_language ?? 'kn',
+              payload: {
+                ...(existing?.payload ?? {}),
+                priceReviewed: true,
+              },
+            });
+          } catch (dbErr) {
+            console.error('Failed to update draft payload in PriceScreen', dbErr);
+          }
+        }
       } catch (err) {
         // Never invent a price on failure — show recoverable error, not a stuck spinner.
         setPriceError('Could not load price. Check connection and try again.');
@@ -44,27 +66,34 @@ export default function PriceScreen() {
     })();
   }, [draftId]);
 
-  const handleContinue = () => {
-    // @ts-expect-error
+  const handleContinue = async () => {
+    try {
+      const existing = await getDraft(draftId);
+      await saveDraft({
+        id: draftId,
+        listing_id: existing?.listing_id ?? draftId,
+        state: existing?.state ?? 'draft',
+        preferred_language: existing?.preferred_language ?? 'kn',
+        payload: {
+          ...(existing?.payload ?? {}),
+          priceReviewed: true,
+        },
+      });
+    } catch (dbErr) {
+      console.error('Failed to update draft payload on continue', dbErr);
+    }
     navigation.navigate('SubmitApproval', { draftId });
   };
 
-if (loading || !price) {
-  return (
-    <View style={styles.centered}>
-      <ActivityIndicator size="large" color={colors.primary} />
-      <Text style={styles.hint}>Calculating a fair price…</Text>
-    </View>
-  );
-}
+  if (loading) {
+    return <ProcessingIndicator hint="Calculating a fair price…" />;
+  }
 
-if (priceError) {
-  return (
-    <View style={styles.centered}>
-      <Text style={styles.hint}>{priceError}</Text>
-      <Button
-        mode="contained"
-        onPress={() => {
+  if (priceError || !price) {
+    return (
+      <ErrorRetryCard
+        errorText={priceError ?? 'Something went wrong loading your price.'}
+        onRetry={() => {
           setLoading(true);
           setPriceError(null);
           service.requestPrice(draftId, {
@@ -74,18 +103,30 @@ if (priceError) {
             skill_level: 'skilled',
             techniques: ['handloom_weave'],
             comparables: [],
-          }).then(setPrice).catch(() => setPriceError('Could not load price. Check connection and try again.')).finally(() => setLoading(false));
+          }).then(async (res) => {
+            setPrice(res);
+            if (res.status === 'available') {
+              try {
+                const existing = await getDraft(draftId);
+                await saveDraft({
+                  id: draftId,
+                  listing_id: existing?.listing_id ?? draftId,
+                  state: existing?.state ?? 'draft',
+                  preferred_language: existing?.preferred_language ?? 'kn',
+                  payload: { ...(existing?.payload ?? {}), priceReviewed: true },
+                });
+              } catch (dbErr) {
+                console.error('Failed to update draft payload on retry', dbErr);
+              }
+            }
+          }).catch(() => setPriceError('Could not load price. Check connection and try again.')).finally(() => setLoading(false));
         }}
-        buttonColor={colors.primary}
-        style={styles.continueBtn}
-      >
-        Retry
-      </Button>
-    </View>
-  );
-}
+        retryLabel="Retry"
+      />
+    );
+  }
 
-
+  // Hard rule: never invent a number. If unavailable, say so plainly — calm, not alarming.
   if (price.status === 'unavailable') {
     return (
       <ScrollView contentContainerStyle={styles.container}>

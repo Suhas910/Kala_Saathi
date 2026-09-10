@@ -4,7 +4,7 @@ import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Text, Button, Menu, ActivityIndicator } from 'react-native-paper';
 import { useAudioRecorder, RecordingPresets, AudioModule } from 'expo-audio';
 import { useTranslation } from 'react-i18next';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { useQuery } from '@tanstack/react-query';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { ArtisanStackParamList } from '../../types/navigation';
@@ -20,8 +20,8 @@ const LANGUAGES = [
 export default function SpeakScreen() {
   const { t, i18n } = useTranslation();
   const navigation = useNavigation<NativeStackNavigationProp<ArtisanStackParamList>>();
-  const route = useRoute();
-  const { draftId } = (route.params as { draftId: string }) ?? {};
+  const route = useRoute<RouteProp<ArtisanStackParamList, 'Speak'>>();
+  const { draftId } = route.params;
 
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const [isRecording, setIsRecording] = useState(false);

@@ -2,16 +2,18 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, Button, Card, TextInput, ActivityIndicator } from 'react-native-paper';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { CoordinatorStackParamList } from '../../types/navigation';
 import { colors, spacing } from '../../theme';
 import type { Claim } from '../../types/contracts';
 import { service } from '../../services';
+import { ProcessingIndicator } from '../../components';
 
 export default function CoordinatorReviewScreen() {
-  const navigation = useNavigation();
-  const route = useRoute();
-  // @ts-expect-error — typed nav params land once types/navigation.ts is filled
-  const { listingId = 'mock_listing_123' } = route.params ?? {};
+  const navigation = useNavigation<NativeStackNavigationProp<CoordinatorStackParamList>>();
+  const route = useRoute<RouteProp<CoordinatorStackParamList, 'CoordinatorDashboard'>>();
+  const listingId = 'mock_listing_123';
 
   const [loading, setLoading] = useState(false);
   const [evidenceNotes, setEvidenceNotes] = useState<Record<string, string>>({});
@@ -76,11 +78,7 @@ export default function CoordinatorReviewScreen() {
   };
 
   if (loading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
+    return <ProcessingIndicator />;
   }
 
   return (
