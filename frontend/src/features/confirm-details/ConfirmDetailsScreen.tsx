@@ -1,24 +1,20 @@
 // src/features/confirm-details/ConfirmDetailsScreen.tsx
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
-import { Text, Button, TextInput, ActivityIndicator, Chip } from 'react-native-paper';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { Text, Button, TextInput, Chip } from 'react-native-paper';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { ArtisanStackParamList } from '../../types/navigation';
 import { service } from '../../services';
+import { getDraft, saveDraft } from '../../services/database';
 import { colors, spacing } from '../../theme';
 import type { CatalogueResult } from '../../types/contracts';
-
-// Confidence -> friendly colored dot, never a raw percentage (low-literacy rule)
-const confidenceColor = (score: number) => {
-  if (score >= 0.85) return colors.success;
-  if (score >= 0.65) return colors.accent;
-  return colors.error;
-};
+import { ConfidenceDot, ProcessingIndicator, ErrorRetryCard } from '../../components';
 
 export default function ConfirmDetailsScreen() {
-  const navigation = useNavigation();
-  const route = useRoute();
-  // @ts-expect-error — typed nav params land once types/navigation.ts is filled
-  const { draftId, transcriptId } = route.params ?? {};
+  const navigation = useNavigation<NativeStackNavigationProp<ArtisanStackParamList>>();
+  const route = useRoute<RouteProp<ArtisanStackParamList, 'ConfirmDetails'>>();
+  const { draftId, transcriptId } = route.params;
 
   const [result, setResult] = useState<CatalogueResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -50,36 +46,25 @@ export default function ConfirmDetailsScreen() {
   }, [draftId, transcriptId]);
 
   if (loading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.hint}>Generating your product details…</Text>
-      </View>
-    );
+    return <ProcessingIndicator hint="Generating your product details…" />;
   }
 
   if (loadError || !result) {
     return (
-      <View style={styles.centered}>
-        <Text style={styles.hint}>{loadError ?? 'Something went wrong loading your draft.'}</Text>
-        <Button
-          mode="contained"
-          onPress={() => {
-            setLoading(true);
-            setLoadError(null);
-            service.requestCatalogueGeneration(draftId, {
-              transcript_id: transcriptId,
-              image_media_ids: [],
-              confirmed_facts: {},
-              taxonomy_version: '0.1.0',
-            }).then(setResult).catch(() => setLoadError('Could not generate catalogue details. Your draft is safe — try again.')).finally(() => setLoading(false));
-          }}
-          buttonColor={colors.primary}
-          style={styles.submitBtn}
-        >
-          Retry
-        </Button>
-      </View>
+      <ErrorRetryCard
+        errorText={loadError ?? 'Something went wrong loading your draft.'}
+        onRetry={() => {
+          setLoading(true);
+          setLoadError(null);
+          service.requestCatalogueGeneration(draftId, {
+            transcript_id: transcriptId,
+            image_media_ids: [],
+            confirmed_facts: {},
+            taxonomy_version: '0.1.0',
+          }).then(setResult).catch(() => setLoadError('Could not generate catalogue details. Your draft is safe — try again.')).finally(() => setLoading(false));
+        }}
+        retryLabel="Retry"
+      />
     );
   }
 
@@ -123,7 +108,22 @@ export default function ConfirmDetailsScreen() {
         corrections,
       });
 
-      // @ts-expect-error
+      try {
+        const existing = await getDraft(draftId);
+        await saveDraft({
+          id: draftId,
+          listing_id: existing?.listing_id ?? draftId,
+          state: existing?.state ?? 'draft',
+          preferred_language: existing?.preferred_language ?? 'kn',
+          payload: {
+            ...(existing?.payload ?? {}),
+            catalogueConfirmed: true,
+          },
+        });
+      } catch (dbErr) {
+        console.error('Failed to update draft payload in ConfirmDetails', dbErr);
+      }
+
       navigation.navigate('Price', { draftId });
     } catch (err) {
       // Contract: CATALOGUE_SCHEMA_INVALID -> keep the draft, show retry. Never lose edits on failure.
@@ -148,7 +148,7 @@ export default function ConfirmDetailsScreen() {
             <View style={styles.fieldHeader}>
               <Text style={styles.fieldLabel}>{field.label}</Text>
               {confidence !== undefined && (
-                <View style={[styles.confidenceDot, { backgroundColor: confidenceColor(confidence) }]} />
+                <ConfidenceDot confidence={confidence} />
               )}
             </View>
 

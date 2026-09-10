@@ -14,6 +14,9 @@ import type { ArtisanStackParamList } from '../../types/navigation';
 
 
 
+import { useDraftStore } from '../../store/draftStore';
+import { ProcessingIndicator } from '../../components';
+
 // --- State → visual mapping ---
 // Colors chosen for quick scanability, not just decoration:
 // warm/neutral = in-progress, indigo = needs artisan action, green = done, red = blocked
@@ -69,32 +72,30 @@ export default function MyListingsScreen() {
   );
 
   const handleCardPress = (listing: Listing) => {
-  switch (listing.state) {
-    case 'draft':
-      navigation.navigate('Capture', { draftId: listing.id });
-      break;
-    case 'awaiting_confirmation':
-      navigation.navigate('ConfirmDetails', { draftId: listing.id });
-      break;
-    case 'awaiting_approval':
-    case 'approved':
-    case 'export_queued':
-    case 'exported':
-      navigation.navigate('Price', { draftId: listing.id });
-      break;
-    case 'rejected':
-    case 'failed':
-      navigation.navigate('Capture', { draftId: listing.id });
-      break;
-  }
-};
+    switch (listing.state) {
+      case 'draft':
+      case 'rejected':
+      case 'failed':
+        useDraftStore.getState().setActiveDraft(listing.id);
+        navigation.navigate('Capture');
+        break;
+      case 'awaiting_confirmation':
+        navigation.navigate('ConfirmDetails', {
+          draftId: listing.id,
+          transcriptId: listing.catalogue?.catalogue.source.transcript_id ?? 'transcript_uuid',
+        });
+        break;
+      case 'awaiting_approval':
+      case 'approved':
+      case 'export_queued':
+      case 'exported':
+        navigation.navigate('Price', { draftId: listing.id });
+        break;
+    }
+  };
 
   if (isLoading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator animating size="large" color={colors.primary} />
-      </View>
-    );
+    return <ProcessingIndicator />;
   }
 
   return (

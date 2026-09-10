@@ -4,6 +4,8 @@ import { View, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Text, ActivityIndicator, IconButton } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { ArtisanStackParamList } from '../../types/navigation';
 import * as Crypto from 'expo-crypto';
 import { service } from '../../services';
 import { saveDraft } from '../../services/database';
@@ -11,7 +13,7 @@ import { useDraftStore } from '../../store/draftStore';
 import { colors, spacing } from '../../theme';
 
 export default function CaptureScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<ArtisanStackParamList>>();
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
   const [capturedUris, setCapturedUris] = useState<string[]>([]);
@@ -87,7 +89,7 @@ export default function CaptureScreen() {
   };
 
   const handleContinue = () => {
-    // @ts-expect-error — typed navigation params wired once types/navigation.ts is filled
+    if (!activeDraftId) return;
     navigation.navigate('ImageReview', { draftId: activeDraftId });
   };
 
