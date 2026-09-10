@@ -101,12 +101,14 @@ export const liveApi: ListingService = {
   },
 
   requestImageAnalysis: async (listingId: string, payload: { media_id: string; photos?: string[] }) => {
-    const res = await api.post(`/listings/${listingId}/ai/image-studio`, payload);
+    // Aligned to contract: POST /listings/{id}/jobs/image-studio
+    const res = await api.post(`/listings/${listingId}/jobs/image-studio`, payload);
     return res.data;
   },
 
   requestTranscription: async (listingId: string, payload: { audio_media_id: string; declared_language: string }) => {
-    const res = await api.post(`/listings/${listingId}/ai/transcription`, payload);
+    // Aligned to contract: POST /listings/{id}/jobs/transcription
+    const res = await api.post(`/listings/${listingId}/jobs/transcription`, payload);
     return res.data;
   },
 
@@ -116,12 +118,16 @@ export const liveApi: ListingService = {
   },
 
   getImageJobResult: async (jobId: string): Promise<ImageJobResult> => {
+    // NOTE FOR BACKEND TEAM: Contract specifies GET /jobs/{id} returning status.
+    // Clarify if job result is embedded in GET /jobs/{id} upon completion or if
+    // this separate GET /jobs/{id}/result endpoint should be provided.
     const res = await api.get(`/jobs/${jobId}/result`);
-    return res.data;
+    return res.data?.result ?? res.data;
   },
 
   requestCatalogueGeneration: async (listingId: string, payload: any): Promise<CatalogueResult> => {
-    const res = await api.post(`/listings/${listingId}/ai/catalogue`, payload);
+    // Aligned to contract: POST /listings/{id}/jobs/catalogue
+    const res = await api.post(`/listings/${listingId}/jobs/catalogue`, payload);
     return res.data;
   },
 
@@ -148,7 +154,8 @@ export const liveApi: ListingService = {
   },
 
   submitForApproval: async (listingId: string) => {
-    const res = await api.post(`/listings/${listingId}/submit-approval`);
+    // Aligned to contract: POST /listings/{id}/submit-for-approval
+    const res = await api.post(`/listings/${listingId}/submit-for-approval`);
     return res.data;
   },
 
@@ -158,7 +165,8 @@ export const liveApi: ListingService = {
   },
 
   requestExport: async (listingId: string, payload: { target: string; schema_version: string }): Promise<ExportResult> => {
-    const res = await api.post(`/listings/${listingId}/export`, payload);
+    // Aligned to contract: POST /listings/{id}/exports
+    const res = await api.post(`/listings/${listingId}/exports`, payload);
     return res.data;
   },
 };

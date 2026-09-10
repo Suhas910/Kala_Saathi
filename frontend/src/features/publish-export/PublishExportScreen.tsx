@@ -1,7 +1,7 @@
 // src/features/publish-export/PublishExportScreen.tsx
 import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { Text, Button } from 'react-native-paper';
+import { Text, Button, Switch } from 'react-native-paper';
 import { useRoute, useNavigation, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import QRCode from 'react-native-qrcode-svg';
@@ -20,12 +20,18 @@ export default function PublishExportScreen() {
   const [loading, setLoading] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [showJsonPayload, setShowJsonPayload] = useState(false);
+  const [simulateBroadcast, setSimulateBroadcast] = useState(false);
 
-  const handleExport = async () => {
+  const handleExport = async (overrideSimulation?: boolean) => {
+    const isSimulating = overrideSimulation !== undefined ? overrideSimulation : simulateBroadcast;
     setLoading(true);
     setExportError(null);
     try {
-      const res = await service.requestExport(listingId, { target: 'ondc_retail', schema_version: '1.0.0' });
+      const res = await service.requestExport(listingId, {
+        target: 'ondc_retail',
+        schema_version: '1.0.0',
+        simulate_network_submission: isSimulating,
+      });
       setExportResult(res);
     } catch (err) {
       // Contract: EXPORT_CONTRACT_INVALID -> "show export not ready; do not claim marketplace publication."
@@ -55,12 +61,33 @@ export default function PublishExportScreen() {
 
         {/* Pre-Export Initiation Card */}
         {!exportResult && !exportError && (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Ready for Network Publication</Text>
-            <Text style={styles.cardText}>
-              This listing has been verified by the craft coordinator. Dispatching will validate schema conformity, attach the cryptographic signature, and transmit the record to the ONDC retail registry.
-            </Text>
-          </View>
+          <>
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Ready for Local Gateway Staging</Text>
+              <Text style={styles.cardText}>
+                This listing has been verified by the craft coordinator. Proceeding will validate schema conformity against ONDC standards, seal the record with a cryptographic signature, and stage it on the local gateway.
+              </Text>
+            </View>
+
+            {/* Explicit Demo Simulation Switch Card */}
+            <View style={styles.demoControlCard}>
+              <View style={styles.demoControlRow}>
+                <View style={{ flex: 1, marginRight: spacing.sm }}>
+                  <Text style={styles.demoControlTitle}>DEMO BROADCAST SIMULATION</Text>
+                  <Text style={styles.demoControlSubtitle}>
+                    {simulateBroadcast
+                      ? 'Demo Simulation Active: Simulating live ONDC registry broadcast for presentation.'
+                      : 'MVP Default: Local gateway staging only. Live ONDC production broadcast is not claimed.'}
+                  </Text>
+                </View>
+                <Switch
+                  value={simulateBroadcast}
+                  onValueChange={setSimulateBroadcast}
+                  color={colors.secondary}
+                />
+              </View>
+            </View>
+          </>
         )}
 
       {/* Error State with Retry */}
@@ -68,7 +95,7 @@ export default function PublishExportScreen() {
         <ErrorRetryCard
           asCard
           errorText={exportError}
-          onRetry={handleExport}
+          onRetry={() => handleExport()}
           retryLabel="Retry Export Pipeline"
         />
       )}
@@ -119,12 +146,34 @@ export default function PublishExportScreen() {
                 <Text style={styles.stepTitle}>3. ONDC Network Submission</Text>
                 <Text style={styles.stepMeta}>
                   {exportResult.network_submission === 'success'
-                    ? 'Confirmed · Published to ONDC Retail Registry'
+                    ? 'Confirmed · Published to ONDC Retail Registry (Simulated Demo)'
                     : exportResult.network_submission === 'pending'
                     ? 'In Progress · Awaiting confirmation'
-                    : 'Not Transmitted'}
+                    : 'Not Transmitted (Local Gateway Validated · Staged for Export)'}
                 </Text>
               </View>
+            </View>
+          </View>
+
+          {/* Explicit Demo Simulation Switch on Result */}
+          <View style={styles.demoControlCard}>
+            <View style={styles.demoControlRow}>
+              <View style={{ flex: 1, marginRight: spacing.sm }}>
+                <Text style={styles.demoControlTitle}>DEMO BROADCAST SIMULATION</Text>
+                <Text style={styles.demoControlSubtitle}>
+                  {simulateBroadcast
+                    ? 'Showing simulated live ONDC registry broadcast.'
+                    : 'MVP Default: Staged locally. Switch on to simulate live registry broadcast.'}
+                </Text>
+              </View>
+              <Switch
+                value={simulateBroadcast}
+                onValueChange={(val) => {
+                  setSimulateBroadcast(val);
+                  handleExport(val);
+                }}
+                color={colors.secondary}
+              />
             </View>
           </View>
 
@@ -202,13 +251,13 @@ export default function PublishExportScreen() {
       <BottomDock>
         <Button
           mode="contained"
-          onPress={handleExport}
+          onPress={() => handleExport()}
           buttonColor={colors.primary}
           textColor="#FFFFFF"
           style={styles.primaryBtn}
           contentStyle={{ height: 48 }}
         >
-          Transmit to ONDC Network
+          {simulateBroadcast ? 'Simulate ONDC Broadcast (Demo)' : 'Validate & Stage for Export'}
         </Button>
       </BottomDock>
     )}
@@ -422,6 +471,31 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     minHeight: spacing.tapTarget,
     justifyContent: 'center',
+  },
+  demoControlCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.indigoBorder,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  demoControlRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  demoControlTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    color: colors.secondary,
+    marginBottom: 3,
+  },
+  demoControlSubtitle: {
+    fontSize: 12,
+    color: colors.textMuted,
+    lineHeight: 16,
   },
   bottomSpacer: {
     height: 40,

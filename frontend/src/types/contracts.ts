@@ -179,5 +179,5 @@ export interface ListingService {
   reviewClaim(listingId: string, claim: string, payload: { decision: string; evidence_note: string; reason: string | null }): Promise<{ claim: string; coordinator_verified: boolean; evidence_note: string }>;
   submitForApproval(listingId: string): Promise<{ status: string }>;
   decideApproval(listingId: string, payload: { decision: string; reason: string }): Promise<{ status: string; reason: string }>;
-  requestExport(listingId: string, payload: { target: string; schema_version: string }): Promise<ExportResult>;
+  requestExport(listingId: string, payload: { target: string; schema_version: string; simulate_network_submission?: boolean }): Promise<ExportResult>;
 }
