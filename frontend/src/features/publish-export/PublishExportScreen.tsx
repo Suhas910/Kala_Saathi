@@ -1,14 +1,15 @@
 // src/features/publish-export/PublishExportScreen.tsx
-import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
-import { Text, Button, Card, ActivityIndicator } from 'react-native-paper';
+import React, { useState } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { Text, Button } from 'react-native-paper';
 import { useRoute, useNavigation, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import QRCode from 'react-native-qrcode-svg';
 import type { CoordinatorStackParamList } from '../../types/navigation';
 import { colors, spacing } from '../../theme';
 import type { ExportResult } from '../../types/contracts';
 import { service } from '../../services';
-import { ErrorRetryCard } from '../../components';
+import { ErrorRetryCard, ProcessingIndicator, BottomDock } from '../../components';
 
 export default function PublishExportScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<CoordinatorStackParamList>>();
@@ -18,6 +19,7 @@ export default function PublishExportScreen() {
   const [exportResult, setExportResult] = useState<ExportResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [showJsonPayload, setShowJsonPayload] = useState(false);
 
   const handleExport = async () => {
     setLoading(true);
@@ -33,98 +35,395 @@ export default function PublishExportScreen() {
     }
   };
 
+  if (loading) {
+    return <ProcessingIndicator hint="Validating and signing export payload..." />;
+  }
+
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text variant="titleLarge" style={styles.title}>Export Listing</Text>
-
-      {!exportResult && !loading && (
-        <Card style={styles.card}>
-          <Card.Content>
-            <Text style={styles.text}>Listing approved. Ready for marketplace export.</Text>
-            <Button
-              mode="contained"
-              onPress={handleExport}
-              buttonColor={colors.primary}
-              style={styles.btn}
-            >
-              Start Export
-            </Button>
-          </Card.Content>
-        </Card>
-      )}
-
-      {loading && (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.text}>Processing export...</Text>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={[styles.container, { paddingBottom: 120 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.kicker}>MARKETPLACE INTEGRATION</Text>
+          <Text style={styles.title}>Export Listing</Text>
+          <Text style={styles.subtitle}>ID: {listingId} · Target: ONDC Retail Network (v1.0.0)</Text>
         </View>
-      )}
 
-      {exportError && !loading && (
+        {/* Pre-Export Initiation Card */}
+        {!exportResult && !exportError && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Ready for Network Publication</Text>
+            <Text style={styles.cardText}>
+              This listing has been verified by the craft coordinator. Dispatching will validate schema conformity, attach the cryptographic signature, and transmit the record to the ONDC retail registry.
+            </Text>
+          </View>
+        )}
+
+      {/* Error State with Retry */}
+      {exportError && (
         <ErrorRetryCard
           asCard
           errorText={exportError}
           onRetry={handleExport}
-          retryLabel="Retry Export"
+          retryLabel="Retry Export Pipeline"
         />
       )}
 
+      {/* Post-Export Result */}
       {exportResult && (
-        <Card style={styles.card}>
-          <Card.Content>
-            <Text variant="titleMedium" style={styles.sectionTitle}>Export Status</Text>
+        <>
+          {/* Stepper Pipeline Card */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Export Pipeline Status</Text>
 
-            {/* NOTE: status 'submitted'/'exported' values in types/contracts.ts are NOT confirmed by
-                AI_INTERFACE_CONTRACTS.md — doc only documents status:"validated" as an example.
-                Flagged to backend/integration owner. Stepper below leans on network_submission
-                instead, since contract explicitly documents that field's states (not_attempted/
-                pending/success/failed) — safer source of truth until confirmed. */}
-            <View style={styles.step}>
-              <View style={[styles.dot, exportResult.contract_validation.passed ? styles.activeBg : styles.inactiveBg]} />
-              <Text style={styles.text}>1. Validated (Schema match)</Text>
+            {/* Step 1: Schema Validation */}
+            <View style={styles.pipelineStep}>
+              <View style={styles.stepIndicator}>
+                <View style={[styles.stepDot, exportResult.contract_validation.passed ? styles.stepDotSuccess : styles.stepDotPending]} />
+                <View style={styles.stepConnector} />
+              </View>
+              <View style={styles.stepContent}>
+                <Text style={styles.stepTitle}>1. Schema Validation</Text>
+                <Text style={styles.stepMeta}>
+                  {exportResult.contract_validation.passed
+                    ? `Passed · Conforms to ${exportResult.contract_validation.schema_source}`
+                    : 'Validation Failed'}
+                </Text>
+              </View>
             </View>
 
-            <View style={styles.step}>
-              <View style={[styles.dot, exportResult.network_submission === 'pending' || exportResult.network_submission === 'success' ? styles.activeBg : styles.inactiveBg]} />
-              <Text style={styles.text}>2. Submitted (Sent to network)</Text>
+            {/* Step 2: Payload Signing */}
+            <View style={styles.pipelineStep}>
+              <View style={styles.stepIndicator}>
+                <View style={[styles.stepDot, exportResult.payload_hash ? styles.stepDotSuccess : styles.stepDotPending]} />
+                <View style={styles.stepConnector} />
+              </View>
+              <View style={styles.stepContent}>
+                <Text style={styles.stepTitle}>2. Payload Cryptographic Hash</Text>
+                <Text style={styles.stepMeta}>
+                  SHA-256: {exportResult.payload_hash ? `${exportResult.payload_hash.substring(0, 16)}...` : 'Pending'}
+                </Text>
+              </View>
             </View>
 
-            <View style={styles.step}>
-              <View style={[styles.dot, exportResult.network_submission === 'success' ? styles.activeBg : styles.inactiveBg]} />
-              <Text style={styles.text}>
-                3. Exported 
-                {exportResult.network_submission === 'success' ? ' (Published to ONDC)' : ' (Pending network confirm)'}
+            {/* Step 3: Network Submission */}
+            <View style={styles.pipelineStep}>
+              <View style={styles.stepIndicator}>
+                <View style={[styles.stepDot, exportResult.network_submission === 'success' ? styles.stepDotSuccess : styles.stepDotPending]} />
+              </View>
+              <View style={styles.stepContent}>
+                <Text style={styles.stepTitle}>3. ONDC Network Submission</Text>
+                <Text style={styles.stepMeta}>
+                  {exportResult.network_submission === 'success'
+                    ? 'Confirmed · Published to ONDC Retail Registry'
+                    : exportResult.network_submission === 'pending'
+                    ? 'In Progress · Awaiting confirmation'
+                    : 'Not Transmitted'}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Verifiable Provenance QR Code */}
+          <View style={styles.qrCard}>
+            <Text style={styles.kicker}>DIGITAL PROVENANCE</Text>
+            <Text style={styles.qrTitle}>Verifiable Craft Credential</Text>
+            <Text style={styles.qrSubtitle}>
+              Scan on any consumer network or retail outlet to verify authentic artisan origin and fair wage compliance.
+            </Text>
+
+            <View style={styles.qrCodeWrapper}>
+              <QRCode
+                value={JSON.stringify({
+                  listing_id: listingId,
+                  target: exportResult.target,
+                  hash: exportResult.payload_hash,
+                  status: exportResult.status,
+                })}
+                size={160}
+                color={colors.text}
+                backgroundColor="#FFFFFF"
+              />
+            </View>
+
+            <View style={styles.metaRow}>
+              <Text style={styles.metaLabel}>REGISTRY HASH</Text>
+              <Text style={styles.metaValue} numberOfLines={1} ellipsizeMode="middle">
+                {exportResult.payload_hash || 'N/A'}
               </Text>
             </View>
+          </View>
 
-            <View style={styles.metaBox}>
-              <Text style={styles.metaText}>Target: {exportResult.target}</Text>
-              <Text style={styles.metaText}>Hash: {exportResult.payload_hash ? `${exportResult.payload_hash.substring(0, 10)}...` : 'N/A'}</Text>
-            </View>
+          {/* Technical JSON Payload Drawer */}
+          <View style={styles.jsonCard}>
+            <TouchableOpacity
+              onPress={() => setShowJsonPayload((prev) => !prev)}
+              style={styles.jsonToggleRow}
+              accessibilityRole="button"
+            >
+              <Text style={styles.jsonToggleText}>
+                {showJsonPayload ? 'Hide Technical Payload' : 'Inspect Signed JSON Payload'}
+              </Text>
+              <Text style={styles.jsonToggleIcon}>{showJsonPayload ? '▲' : '▼'}</Text>
+            </TouchableOpacity>
 
-            <Button mode="outlined" onPress={() => navigation.goBack()} textColor={colors.secondary} style={styles.btn}>
-              Return to Dashboard
-            </Button>
-          </Card.Content>
-        </Card>
+            {showJsonPayload && (
+              <View style={styles.jsonContent}>
+                <Text style={styles.jsonCodeText}>
+                  {JSON.stringify(
+                    {
+                      export_id: exportResult.export_id,
+                      target: exportResult.target,
+                      status: exportResult.status,
+                      payload_hash: exportResult.payload_hash,
+                      contract_validation: exportResult.contract_validation,
+                      network_submission: exportResult.network_submission,
+                    },
+                    null,
+                    2
+                  )}
+                </Text>
+              </View>
+            )}
+          </View>
+
+        </>
       )}
+
+      <View style={styles.bottomSpacer} />
     </ScrollView>
-  );
+
+    {/* Docked Action Bar */}
+    {!exportResult && !exportError && (
+      <BottomDock>
+        <Button
+          mode="contained"
+          onPress={handleExport}
+          buttonColor={colors.primary}
+          textColor="#FFFFFF"
+          style={styles.primaryBtn}
+          contentStyle={{ height: 48 }}
+        >
+          Transmit to ONDC Network
+        </Button>
+      </BottomDock>
+    )}
+
+    {exportResult && (
+      <BottomDock>
+        <Button
+          mode="outlined"
+          onPress={() => navigation.goBack()}
+          textColor={colors.secondary}
+          style={styles.returnBtn}
+          contentStyle={{ height: 48 }}
+        >
+          Return to Review Queue
+        </Button>
+      </BottomDock>
+    )}
+  </View>
+);
 }
 
 const styles = StyleSheet.create({
-  container: { padding: spacing.lg, backgroundColor: colors.background, flexGrow: 1 },
-  centered: { padding: spacing.xl, alignItems: 'center' },
-  title: { color: colors.text, marginBottom: spacing.lg, fontFamily: 'Baloo 2' },
-  sectionTitle: { color: colors.text, marginBottom: spacing.md, fontWeight: 'bold' },
-  card: { backgroundColor: colors.surface, borderRadius: 16, marginBottom: spacing.md },
-  text: { color: colors.text, marginTop: spacing.xs },
-  btn: { marginTop: spacing.md, minHeight: spacing.tapTarget, justifyContent: 'center' },
-  step: { flexDirection: 'row', alignItems: 'center', marginVertical: spacing.sm, gap: spacing.md },
-  dot: { width: 16, height: 16, borderRadius: 8 },
-  activeBg: { backgroundColor: colors.success },
-  inactiveBg: { backgroundColor: '#E0E0E0' },
-  metaBox: { backgroundColor: '#EDE7DD', padding: spacing.sm, borderRadius: 8, marginTop: spacing.lg },
-  metaText: { fontSize: 12, color: colors.secondary },
-  errorText: { color: colors.error, marginBottom: spacing.sm }
+  container: {
+    padding: spacing.lg,
+    backgroundColor: colors.background,
+    flexGrow: 1,
+  },
+  header: {
+    marginBottom: spacing.lg,
+  },
+  kicker: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    color: colors.textMuted,
+    marginBottom: 4,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: colors.text,
+    letterSpacing: -0.3,
+  },
+  subtitle: {
+    fontSize: 13,
+    color: colors.textMuted,
+    marginTop: 4,
+  },
+  card: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: spacing.xs,
+  },
+  cardText: {
+    fontSize: 13,
+    color: colors.textMuted,
+    lineHeight: 19,
+    marginBottom: spacing.lg,
+  },
+  primaryBtn: {
+    borderRadius: 8,
+    minHeight: spacing.tapTarget,
+    justifyContent: 'center',
+  },
+  pipelineStep: {
+    flexDirection: 'row',
+    marginTop: spacing.sm,
+  },
+  stepIndicator: {
+    width: 24,
+    alignItems: 'center',
+    marginRight: spacing.sm,
+  },
+  stepDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  stepDotSuccess: {
+    backgroundColor: colors.secondary,
+    borderColor: colors.secondary,
+  },
+  stepDotPending: {
+    backgroundColor: colors.badgeNeutral,
+    borderColor: colors.border,
+  },
+  stepConnector: {
+    width: 2,
+    flex: 1,
+    minHeight: 24,
+    backgroundColor: colors.border,
+    marginVertical: 4,
+  },
+  stepContent: {
+    flex: 1,
+    paddingBottom: spacing.sm,
+  },
+  stepTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  stepMeta: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  qrCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    padding: spacing.lg,
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  qrTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+    marginTop: 2,
+    marginBottom: 4,
+  },
+  qrSubtitle: {
+    fontSize: 12,
+    color: colors.textMuted,
+    textAlign: 'center',
+    lineHeight: 16,
+    marginBottom: spacing.lg,
+    paddingHorizontal: spacing.sm,
+  },
+  qrCodeWrapper: {
+    padding: spacing.md,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    marginBottom: spacing.md,
+  },
+  metaRow: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: colors.badgeNeutral,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  metaLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    color: colors.textMuted,
+  },
+  metaValue: {
+    fontSize: 11,
+    fontFamily: 'monospace',
+    color: colors.text,
+    maxWidth: '70%',
+  },
+  jsonCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  jsonToggleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  jsonToggleText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.secondary,
+  },
+  jsonToggleIcon: {
+    fontSize: 10,
+    color: colors.secondary,
+  },
+  jsonContent: {
+    backgroundColor: colors.badgeNeutral,
+    borderRadius: 6,
+    padding: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  jsonCodeText: {
+    fontFamily: 'monospace',
+    fontSize: 11,
+    color: colors.text,
+    lineHeight: 16,
+  },
+  returnBtn: {
+    borderRadius: 8,
+    borderColor: colors.border,
+    minHeight: spacing.tapTarget,
+    justifyContent: 'center',
+  },
+  bottomSpacer: {
+    height: 40,
+  },
 });

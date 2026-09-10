@@ -66,7 +66,10 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: colors.surface,
-    borderRadius: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    elevation: 0,
     marginBottom: spacing.md,
   },
   hint: {

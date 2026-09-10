@@ -113,7 +113,27 @@ export interface Listing {
   updated_at: string;
 }
 
-// --- 5. JOB STATUS ---
+// --- 5. JOB STATUS & AI STUDIO ---
+export interface ImageQualityMetrics {
+  overall: 'acceptable' | 'needs_review' | 'rejected';
+  blur: 'low' | 'medium' | 'high';
+  lighting: 'acceptable' | 'needs_correction' | 'poor';
+  framing: 'acceptable' | 'off_center' | 'cropped';
+  guidance: string[];
+}
+
+export interface ImageJobResult {
+  job_id: string;
+  status: 'complete' | 'failed';
+  quality: ImageQualityMetrics;
+  original_url: string;
+  enhanced_media_id: string;
+  enhanced_url: string;
+  enhanced_urls?: string[];
+  transformations: string[];
+  human_review_required: boolean;
+}
+
 export interface JobStatus {
   job_id: string;
   type: 'image_studio' | 'transcription' | 'catalogue_generation';
@@ -134,4 +154,30 @@ export interface ExportResult {
     schema_source: string;
   };
   network_submission: 'not_attempted' | 'pending' | 'success' | 'failed';
+}
+
+// --- 7. SERVICE INTERFACE ---
+export interface ListingService {
+  createListing(payload: { preferred_language: string }): Promise<{
+    id: string;
+    artisan_id: string;
+    state: ListingState;
+    preferred_language: string;
+    upload_instructions?: any;
+  }>;
+  listListings(): Promise<Listing[]>;
+  getListing(listingId: string): Promise<Listing>;
+  completeMediaUpload(listingId: string, payload: { kind: string; upload_token: string; client_checksum: string }): Promise<{ status: string; media_id: string }>;
+  requestImageAnalysis(listingId: string, payload: { media_id: string; photos?: string[] }): Promise<{ job_id: string }>;
+  requestTranscription(listingId: string, payload: { audio_media_id: string; declared_language: string }): Promise<{ job_id: string }>;
+  getJobStatus(jobId: string): Promise<JobStatus>;
+  getImageJobResult(jobId: string): Promise<ImageJobResult>;
+  requestCatalogueGeneration(listingId: string, payload: any): Promise<CatalogueResult>;
+  confirmListing(listingId: string, payload: { catalogue: any; confirmed_fields: string[]; corrections: { field: string; old_value: any; new_value: any; source: string }[] }): Promise<{ status: string; listing_id: string }>;
+  requestPrice(listingId: string, payload: any): Promise<PriceResult>;
+  requestPrice_unavailable?(): Promise<PriceResult>;
+  reviewClaim(listingId: string, claim: string, payload: { decision: string; evidence_note: string; reason: string | null }): Promise<{ claim: string; coordinator_verified: boolean; evidence_note: string }>;
+  submitForApproval(listingId: string): Promise<{ status: string }>;
+  decideApproval(listingId: string, payload: { decision: string; reason: string }): Promise<{ status: string; reason: string }>;
+  requestExport(listingId: string, payload: { target: string; schema_version: string }): Promise<ExportResult>;
 }

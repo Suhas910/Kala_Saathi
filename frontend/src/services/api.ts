@@ -67,3 +67,98 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// --- LIVE API IMPLEMENTATION OF LISTING SERVICE ---
+import type {
+  ListingService,
+  Listing,
+  JobStatus,
+  ImageJobResult,
+  CatalogueResult,
+  PriceResult,
+  ExportResult,
+} from '../types/contracts';
+
+export const liveApi: ListingService = {
+  createListing: async (payload: { preferred_language: string }) => {
+    const res = await api.post('/listings', payload);
+    return res.data;
+  },
+
+  listListings: async (): Promise<Listing[]> => {
+    const res = await api.get('/listings');
+    return res.data;
+  },
+
+  getListing: async (listingId: string): Promise<Listing> => {
+    const res = await api.get(`/listings/${listingId}`);
+    return res.data;
+  },
+
+  completeMediaUpload: async (listingId: string, payload: { kind: string; upload_token: string; client_checksum: string }) => {
+    const res = await api.post(`/listings/${listingId}/media`, payload);
+    return res.data;
+  },
+
+  requestImageAnalysis: async (listingId: string, payload: { media_id: string; photos?: string[] }) => {
+    const res = await api.post(`/listings/${listingId}/ai/image-studio`, payload);
+    return res.data;
+  },
+
+  requestTranscription: async (listingId: string, payload: { audio_media_id: string; declared_language: string }) => {
+    const res = await api.post(`/listings/${listingId}/ai/transcription`, payload);
+    return res.data;
+  },
+
+  getJobStatus: async (jobId: string): Promise<JobStatus> => {
+    const res = await api.get(`/jobs/${jobId}`);
+    return res.data;
+  },
+
+  getImageJobResult: async (jobId: string): Promise<ImageJobResult> => {
+    const res = await api.get(`/jobs/${jobId}/result`);
+    return res.data;
+  },
+
+  requestCatalogueGeneration: async (listingId: string, payload: any): Promise<CatalogueResult> => {
+    const res = await api.post(`/listings/${listingId}/ai/catalogue`, payload);
+    return res.data;
+  },
+
+  confirmListing: async (
+    listingId: string,
+    payload: {
+      catalogue: any;
+      confirmed_fields: string[];
+      corrections: { field: string; old_value: any; new_value: any; source: string }[];
+    }
+  ) => {
+    const res = await api.post(`/listings/${listingId}/confirm`, payload);
+    return res.data;
+  },
+
+  requestPrice: async (listingId: string, payload: any): Promise<PriceResult> => {
+    const res = await api.post(`/listings/${listingId}/price`, payload);
+    return res.data;
+  },
+
+  reviewClaim: async (listingId: string, claim: string, payload: { decision: string; evidence_note: string; reason: string | null }) => {
+    const res = await api.post(`/listings/${listingId}/claims/${encodeURIComponent(claim)}/review`, payload);
+    return res.data;
+  },
+
+  submitForApproval: async (listingId: string) => {
+    const res = await api.post(`/listings/${listingId}/submit-approval`);
+    return res.data;
+  },
+
+  decideApproval: async (listingId: string, payload: { decision: string; reason: string }) => {
+    const res = await api.post(`/listings/${listingId}/approval`, payload);
+    return res.data;
+  },
+
+  requestExport: async (listingId: string, payload: { target: string; schema_version: string }): Promise<ExportResult> => {
+    const res = await api.post(`/listings/${listingId}/export`, payload);
+    return res.data;
+  },
+};

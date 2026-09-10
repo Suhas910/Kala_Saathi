@@ -43,6 +43,7 @@
     },
     "android": {
       "package": "com.avinavkaushal.karigariconnect",
+      "softwareKeyboardLayoutMode": "resize",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
