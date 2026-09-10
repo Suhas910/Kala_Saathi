@@ -16,6 +16,7 @@ export default function CaptureScreen() {
   const cameraRef = useRef<CameraView>(null);
   const [capturedUris, setCapturedUris] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const { activeDraftId, setActiveDraft } = useDraftStore();
 
   if (!permission) {
@@ -54,6 +55,7 @@ export default function CaptureScreen() {
   const handleCapture = async () => {
     if (!cameraRef.current) return;
     setIsSaving(true);
+    setUploadError(null);
     try {
       const photo = await cameraRef.current.takePictureAsync({ quality: 0.8 });
       if (!photo) return;
@@ -63,11 +65,22 @@ export default function CaptureScreen() {
       // Save original locally FIRST — never lose the source photo, per hard product rules.
       setCapturedUris((prev) => [...prev, photo.uri]);
 
-      await service.completeMediaUpload(draftId, {
-        kind: 'image',
-        upload_token: Crypto.randomUUID(),
-        client_checksum: 'mock_checksum',
-      });
+      // NOTE: outbox.ts calls the real `api` axios client directly (bypasses service/mockApi layer),
+      // so it can't safely queue this yet — during mock phase it would just retry against a backend
+      // that doesn't exist. Flagged to integration owner: wire this through outbox once real
+      // /listings/{id}/media endpoint is live, so upload survives offline per hard rule 7.
+      try {
+        await service.completeMediaUpload(draftId, {
+          kind: 'image',
+          upload_token: Crypto.randomUUID(),
+          client_checksum: 'mock_checksum',
+        });
+      } catch (uploadErr) {
+        // Never silently pretend a failed upload succeeded — keep the local photo (safe), tell the artisan.
+        setUploadError('Photo saved on your device, but upload failed. It will retry when you continue.');
+      }
+    } catch (err) {
+      setUploadError('Could not capture photo. Try again.');
     } finally {
       setIsSaving(false);
     }
@@ -99,6 +112,7 @@ export default function CaptureScreen() {
             ? 'Take a clear photo of your product'
             : `${capturedUris.length} photo${capturedUris.length > 1 ? 's' : ''} captured — add more angles or continue`}
         </Text>
+        {uploadError && <Text style={styles.errorText}>{uploadError}</Text>}
 
         <View style={styles.buttonRow}>
           <TouchableOpacity
@@ -134,6 +148,7 @@ const styles = StyleSheet.create({
   thumbRemoveBadge: { position: 'absolute', top: -4, right: -4, backgroundColor: colors.error, borderRadius: 8, width: 16, height: 16, justifyContent: 'center', alignItems: 'center' },
   controls: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: spacing.lg, backgroundColor: 'rgba(0,0,0,0.5)' },
   hint: { color: '#FFF', textAlign: 'center', marginBottom: spacing.md },
+  errorText: { color: '#FFB4A2', textAlign: 'center', marginBottom: spacing.sm },
   buttonRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: spacing.lg },
   captureBtn: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center', borderWidth: 4, borderColor: '#FFF' },
   captureBtnInner: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#FFF' },

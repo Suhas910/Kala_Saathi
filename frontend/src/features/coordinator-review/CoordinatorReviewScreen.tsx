@@ -18,29 +18,62 @@ export default function CoordinatorReviewScreen() {
   const [claimDecisions, setClaimDecisions] = useState<Record<string, 'verified' | 'rejected'>>({});
   const [listingReason, setListingReason] = useState('');
 
-  // Use mock claims pending mockApi.ts getListing expansion
+  // TODO: Replace mock with backend API integration — pull from getListing(listingId).claims once endpoint live.
   const mockClaims: Claim[] = [
     { claim: 'handloom_weave', asserted_by_artisan: true, coordinator_verified: false, evidence_note: null },
     { claim: 'natural_dye', asserted_by_artisan: true, coordinator_verified: false, evidence_note: null }
   ];
-const handleClaimDecision = async (claimId: string, decision: 'verified' | 'rejected') => {
-  setClaimDecisions(prev => ({ ...prev, [claimId]: decision }));
-  await service.reviewClaim(listingId, claimId, {
-    decision,
-    evidence_note: evidenceNotes[claimId] ?? '',
-    reason: decision === 'rejected' ? 'Insufficient evidence' : null,
-  });
-};
 
-const handleListingDecision = async (decision: 'approved' | 'rejected') => {
-  setLoading(true);
-  try {
-    await service.decideApproval(listingId, { decision, reason: listingReason });
-    navigation.goBack();
-  } finally {
-    setLoading(false);
-  }
-};
+  const [claimError, setClaimError] = useState<string | null>(null);
+  const [reasonError, setReasonError] = useState<string | null>(null);
+
+  // Hard rule (build guide): sensitive claims cannot publish without evidence + verification.
+  // Block listing approval until every claim has an explicit decision.
+  const allClaimsDecided = mockClaims.every((c) => claimDecisions[c.claim]);
+
+  const handleClaimDecision = async (claimId: string, decision: 'verified' | 'rejected') => {
+    setClaimError(null);
+    const prevDecision = claimDecisions[claimId];
+    setClaimDecisions(prev => ({ ...prev, [claimId]: decision }));
+    try {
+      await service.reviewClaim(listingId, claimId, {
+        decision,
+        evidence_note: evidenceNotes[claimId] ?? '',
+        reason: decision === 'rejected' ? 'Insufficient evidence' : null,
+      });
+    } catch (err) {
+      // Revert optimistic update on failure — never show a claim as decided if backend didn't confirm it.
+      setClaimDecisions(prev => {
+        const next = { ...prev };
+        if (prevDecision) next[claimId] = prevDecision;
+        else delete next[claimId];
+        return next;
+      });
+      setClaimError('Could not save claim decision. Check connection and try again.');
+    }
+  };
+
+  const handleListingDecision = async (decision: 'approved' | 'rejected') => {
+    if (decision === 'approved' && !allClaimsDecided) {
+      setClaimError('Resolve every claim (Verify or Reject) before approving the listing.');
+      return;
+    }
+    if (decision === 'rejected' && !listingReason.trim()) {
+      setReasonError('Reason is required to reject a listing.');
+      return;
+    }
+    setReasonError(null);
+    setClaimError(null);
+    setLoading(true);
+    try {
+      await service.decideApproval(listingId, { decision, reason: listingReason });
+      navigation.goBack();
+    } catch (err) {
+      setClaimError('Could not submit decision. Check connection and try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -55,6 +88,7 @@ const handleListingDecision = async (decision: 'approved' | 'rejected') => {
       <Text variant="titleLarge" style={styles.title}>Review Queue</Text>
       
       <Text variant="titleMedium" style={styles.sectionTitle}>Sensitive Claims</Text>
+      {claimError && <Text style={styles.errorText}>{claimError}</Text>}
       {mockClaims.map((c) => (
         <Card key={c.claim} style={styles.card}>
           <Card.Content>
@@ -99,12 +133,17 @@ const handleListingDecision = async (decision: 'approved' | 'rejected') => {
         style={styles.input}
         multiline
       />
-      
+      {reasonError && <Text style={styles.errorText}>{reasonError}</Text>}
+      {!allClaimsDecided && (
+        <Text style={styles.hintText}>Resolve all claims above before approving.</Text>
+      )}
+
       <View style={styles.row}>
         <Button
           mode="contained"
           onPress={() => handleListingDecision('approved')}
           buttonColor={colors.primary}
+          disabled={!allClaimsDecided}
           style={styles.actionBtn}
         >
           Approve
@@ -132,5 +171,7 @@ const styles = StyleSheet.create({
   input: { backgroundColor: colors.background, marginBottom: spacing.sm },
   row: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
   pill: { flex: 1, borderRadius: 24 },
-  actionBtn: { flex: 1, minHeight: spacing.tapTarget, justifyContent: 'center' }
+  actionBtn: { flex: 1, minHeight: spacing.tapTarget, justifyContent: 'center' },
+  errorText: { color: colors.error, marginBottom: spacing.sm },
+  hintText: { color: colors.secondary, marginBottom: spacing.sm, fontStyle: 'italic' }
 });

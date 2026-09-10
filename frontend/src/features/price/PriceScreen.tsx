@@ -17,19 +17,30 @@ export default function PriceScreen() {
 
   const [price, setPrice] = useState<PriceResult | null>(null);
   const [loading, setLoading] = useState(true);
+  const [priceError, setPriceError] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
-      const result = await service.requestPrice(draftId, {
-        material_cost_inr: 800,
-        labour_hours: 12,
-        state_code: 'KA',
-        skill_level: 'skilled',
-        techniques: ['handloom_weave'],
-        comparables: [],
-      });
-      setPrice(result);
-      setLoading(false);
+      setLoading(true);
+      setPriceError(null);
+      try {
+        // (material_cost_inr, labour_hours, state_code, skill_level, techniques) once ConfirmDetailsScreen
+        // persists them. Currently static — works for demo, wrong once real drafts vary.
+        const result = await service.requestPrice(draftId, {
+          material_cost_inr: 800,
+          labour_hours: 12,
+          state_code: 'KA',
+          skill_level: 'skilled',
+          techniques: ['handloom_weave'],
+          comparables: [],
+        });
+        setPrice(result);
+      } catch (err) {
+        // Never invent a price on failure — show recoverable error, not a stuck spinner.
+        setPriceError('Could not load price. Check connection and try again.');
+      } finally {
+        setLoading(false);
+      }
     })();
   }, [draftId]);
 
@@ -38,16 +49,43 @@ export default function PriceScreen() {
     navigation.navigate('SubmitApproval', { draftId });
   };
 
-  if (loading || !price) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.hint}>Calculating a fair price…</Text>
-      </View>
-    );
-  }
+if (loading || !price) {
+  return (
+    <View style={styles.centered}>
+      <ActivityIndicator size="large" color={colors.primary} />
+      <Text style={styles.hint}>Calculating a fair price…</Text>
+    </View>
+  );
+}
 
-  // Hard rule: never invent a number. If unavailable, say so plainly — calm, not alarming.
+if (priceError) {
+  return (
+    <View style={styles.centered}>
+      <Text style={styles.hint}>{priceError}</Text>
+      <Button
+        mode="contained"
+        onPress={() => {
+          setLoading(true);
+          setPriceError(null);
+          service.requestPrice(draftId, {
+            material_cost_inr: 800,
+            labour_hours: 12,
+            state_code: 'KA',
+            skill_level: 'skilled',
+            techniques: ['handloom_weave'],
+            comparables: [],
+          }).then(setPrice).catch(() => setPriceError('Could not load price. Check connection and try again.')).finally(() => setLoading(false));
+        }}
+        buttonColor={colors.primary}
+        style={styles.continueBtn}
+      >
+        Retry
+      </Button>
+    </View>
+  );
+}
+
+
   if (price.status === 'unavailable') {
     return (
       <ScrollView contentContainerStyle={styles.container}>

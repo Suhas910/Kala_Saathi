@@ -23,12 +23,18 @@ export default function SubmitApprovalScreen() {
 
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
     setSubmitting(true);
+    setSubmitError(null);
     try {
       await service.submitForApproval(draftId);
       setSubmitted(true);
+    } catch (err) {
+      // Contract: LISTING_STATE_INVALID -> refresh status, block duplicate action.
+      // Backend re-validates all checklist gates server-side; surface its rejection honestly.
+      setSubmitError('Could not submit for review. Some details may still need attention — check your listing and try again.');
     } finally {
       setSubmitting(false);
     }
@@ -62,6 +68,11 @@ export default function SubmitApprovalScreen() {
 
       <Card style={styles.checklistCard}>
         <Card.Content>
+          {/* TODO: checklist below is a static preview, not wired to real draft/listing state yet.
+              Contract: backend re-checks all these conditions server-side on submitForApproval and
+              will reject via LISTING_STATE_INVALID if any fail — this UI should eventually read the
+              actual confirmation/image/price/claim status from the draft rather than always showing
+              "checked". Left as-is for demo, but don't treat these checkmarks as ground truth. */}
           {CHECKLIST.map((item) => (
             <View key={item.key} style={styles.checklistRow}>
               <Checkbox status="checked" color={colors.success} />
@@ -70,6 +81,8 @@ export default function SubmitApprovalScreen() {
           ))}
         </Card.Content>
       </Card>
+
+      {submitError && <Text style={styles.errorText}>{submitError}</Text>}
 
       <Button
         mode="contained"
@@ -95,4 +108,5 @@ const styles = StyleSheet.create({
   checklistLabel: { color: colors.text, flex: 1 },
   submitBtn: { minHeight: spacing.tapTarget, justifyContent: 'center' },
   doneBtn: { marginTop: spacing.xl, minHeight: spacing.tapTarget, justifyContent: 'center' },
+  errorText: { color: colors.error, textAlign: 'center', marginBottom: spacing.md },
 });
