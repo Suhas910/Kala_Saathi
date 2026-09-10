@@ -6,6 +6,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import RootNavigator from './src/app/RootNavigator';
 import { initDatabase } from './src/services/database';
 import { colors } from './src/theme';
+import i18n from './src/i18n';
+import { I18nextProvider } from 'react-i18next';
 
 const theme = {
   ...DefaultTheme,
@@ -29,12 +31,14 @@ export default function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <I18nextProvider i18n={i18n}>
       <PaperProvider
         theme={theme}
         settings={{ icon: (props) => <MaterialCommunityIcons {...props} /> }}
       >
         <RootNavigator />
       </PaperProvider>
+      </I18nextProvider>
     </QueryClientProvider>
   );
 }
