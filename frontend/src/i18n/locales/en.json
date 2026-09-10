@@ -1,0 +1,7 @@
+{
+  "speak": {
+    "instruction": "Tap microphone and describe product",
+    "start": "Start Recording",
+    "stop": "Stop Recording"
+  }
+}

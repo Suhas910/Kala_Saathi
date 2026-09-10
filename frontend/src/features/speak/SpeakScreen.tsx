@@ -1,10 +1,12 @@
 // src/features/speak/SpeakScreen.tsx
 import React, { useState } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
-import { Text, Button, ActivityIndicator, Menu } from 'react-native-paper';
-import { useNavigation, useRoute } from '@react-navigation/native';
-import { useQuery } from '@tanstack/react-query';
+import { Text, Button, Menu } from 'react-native-paper';
 import { useAudioRecorder, RecordingPresets, AudioModule } from 'expo-audio';
+import { useTranslation } from 'react-i18next';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { ArtisanStackParamList } from '../../types/navigation';
 import { service } from '../../services';
 import { colors, spacing } from '../../theme';
 
@@ -15,98 +17,70 @@ const LANGUAGES = [
 ];
 
 export default function SpeakScreen() {
-  const navigation = useNavigation();
+  const { t, i18n } = useTranslation();
+  const navigation = useNavigation<NativeStackNavigationProp<ArtisanStackParamList>>();
   const route = useRoute();
-  // @ts-expect-error — typed nav params land later
-  const { draftId } = route.params ?? {};
+  const { draftId } = (route.params as { draftId: string }) ?? {};
 
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const [isRecording, setIsRecording] = useState(false);
   const [hasRecording, setHasRecording] = useState(false);
-  const [language, setLanguage] = useState(LANGUAGES[0]);
   const [menuVisible, setMenuVisible] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
 
-  const ensurePermission = async () => {
-    const status = await AudioModule.requestRecordingPermissionsAsync();
-    return status.granted;
-  };
+  const currentLang = LANGUAGES.find((l) => l.code === i18n.language) ?? LANGUAGES[0];
 
-  const handleStartRecording = async () => {
-    const granted = await ensurePermission();
-    if (!granted) return;
+  const startRecording = async () => {
+    const status = await AudioModule.requestRecordingPermissionsAsync();
+    if (!status.granted) return;
     await recorder.prepareToRecordAsync();
     recorder.record();
     setIsRecording(true);
   };
 
-  const handleStopRecording = async () => {
+  const stopRecording = async () => {
     await recorder.stop();
     setIsRecording(false);
     setHasRecording(true);
 
-    // Upload + kick off transcription job
-    const result = await service.requestTranscription(draftId, {
-      audio_media_id: 'audio_placeholder',
-      declared_language: language.code,
+    const res = await service.requestTranscription(draftId, {
+      audio_media_id: 'mock_audio_123',
+      declared_language: i18n.language,
     });
-    setJobId(result.job_id);
+    setJobId(res.job_id);
   };
 
-  const { data: job } = useQuery({
-    queryKey: ['job', jobId],
-    queryFn: () => service.getJobStatus(jobId!),
-    enabled: !!jobId,
-    refetchInterval: (query) => (query.state.data?.status === 'complete' ? false : 1500),
-  });
-
   const handleContinue = () => {
-    // @ts-expect-error
     navigation.navigate('ConfirmDetails', { draftId, transcriptId: 'transcript_uuid' });
   };
 
-  const isProcessingTranscript = jobId && job?.status !== 'complete';
-
   return (
     <View style={styles.container}>
-      <Text variant="titleLarge" style={styles.title}>Describe Your Product</Text>
-      <Text style={styles.subtitle}>Speak naturally in your language — mention material, technique, and how long it took.</Text>
+      <Text style={styles.instruction}>{t('speak.instruction')}</Text>
 
       <TouchableOpacity
-        style={[styles.micButton, isRecording && styles.micButtonActive]}
-        onPress={isRecording ? handleStopRecording : handleStartRecording}
-        disabled={!!isProcessingTranscript}
+        style={[styles.micBtn, isRecording && styles.micActive]}
+        onPress={isRecording ? stopRecording : startRecording}
       >
         <Text style={styles.micIcon}>{isRecording ? '■' : '🎤'}</Text>
       </TouchableOpacity>
-
-      <Text style={styles.status}>
-        {isRecording ? 'Recording… tap to stop' : hasRecording ? 'Recorded — processing or ready' : 'Tap to start recording'}
-      </Text>
 
       <Menu
         visible={menuVisible}
         onDismiss={() => setMenuVisible(false)}
         anchor={
-          <Button mode="outlined" onPress={() => setMenuVisible(true)} textColor={colors.secondary} style={styles.langButton}>
-            {language.label}
+          <Button mode="outlined" onPress={() => setMenuVisible(true)} textColor={colors.secondary} style={styles.langBtn}>
+            {currentLang.label}
           </Button>
         }
       >
         {LANGUAGES.map((lang) => (
-          <Menu.Item key={lang.code} onPress={() => { setLanguage(lang); setMenuVisible(false); }} title={lang.label} />
+          <Menu.Item key={lang.code} onPress={() => { i18n.changeLanguage(lang.code); setMenuVisible(false); }} title={lang.label} />
         ))}
       </Menu>
 
-      {isProcessingTranscript && (
-        <View style={styles.processingRow}>
-          <ActivityIndicator color={colors.primary} />
-          <Text style={styles.hint}>Transcribing your recording…</Text>
-        </View>
-      )}
-
-      {job?.status === 'complete' && (
-        <Button mode="contained" onPress={handleContinue} buttonColor={colors.primary} style={styles.continueBtn}>
+      {jobId && (
+        <Button mode="contained" onPress={handleContinue} buttonColor={colors.primary} style={styles.cta}>
           Continue
         </Button>
       )}
@@ -115,20 +89,11 @@ export default function SpeakScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: spacing.lg, backgroundColor: colors.background, alignItems: 'center' },
-  title: { color: colors.text, marginTop: spacing.xl, textAlign: 'center' },
-  subtitle: { color: colors.text, opacity: 0.7, textAlign: 'center', marginTop: spacing.sm, marginBottom: spacing.xxl },
-  micButton: {
-    width: 140, height: 140, borderRadius: 70,
-    backgroundColor: colors.primary,
-    justifyContent: 'center', alignItems: 'center',
-    shadowColor: colors.primary, shadowOpacity: 0.4, shadowRadius: 20, elevation: 8,
-  },
-  micButtonActive: { backgroundColor: colors.error },
+  container: { flex: 1, backgroundColor: colors.background, padding: spacing.lg, justifyContent: 'space-between', alignItems: 'center' },
+  instruction: { fontSize: 20, color: colors.text, textAlign: 'center', marginTop: spacing.xxl },
+  micBtn: { width: 140, height: 140, borderRadius: 70, backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center' },
+  micActive: { backgroundColor: colors.error },
   micIcon: { fontSize: 48 },
-  status: { color: colors.text, marginTop: spacing.lg, marginBottom: spacing.xl },
-  langButton: { borderColor: colors.secondary, minHeight: spacing.tapTarget, justifyContent: 'center' },
-  processingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.xl },
-  hint: { color: colors.text },
-  continueBtn: { marginTop: spacing.xl, width: '100%', minHeight: spacing.tapTarget, justifyContent: 'center' },
+  langBtn: { marginBottom: spacing.md },
+  cta: { width: '100%', minHeight: spacing.tapTarget, justifyContent: 'center' },
 });
