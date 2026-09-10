@@ -5,6 +5,7 @@ import { View, Text } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuthStore } from '../store/authStore';
+import { ProcessingIndicator } from '../components';
 
 // Screens & Stacks
 import SignInScreen from '../features/onboarding/SignInScreen';
@@ -14,7 +15,11 @@ import CoordinatorStack from './CoordinatorStack';
 const Stack = createNativeStackNavigator();
 
 export default function RootNavigator() {
-  const { isAuthenticated, role } = useAuthStore();
+  const { isAuthenticated, role, isHydrated } = useAuthStore();
+
+  if (!isHydrated) {
+    return <ProcessingIndicator hint="Resuming session..." />;
+  }
 
   return (
     <NavigationContainer>

@@ -9,6 +9,8 @@ import { colors } from './src/theme';
 import i18n from './src/i18n';
 import { I18nextProvider } from 'react-i18next';
 
+import { useAuthStore } from './src/store/authStore';
+
 const theme = {
   ...DefaultTheme,
   colors: {
@@ -24,9 +26,10 @@ const theme = {
 const queryClient = new QueryClient();
 
 export default function App() {
-  // Initialize SQLite local draft + outbox tables on boot
+  // Initialize SQLite local draft + outbox tables and restore auth on boot
   useEffect(() => {
     initDatabase();
+    useAuthStore.getState().initAuth();
   }, []);
 
   return (

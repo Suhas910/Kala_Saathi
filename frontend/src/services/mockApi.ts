@@ -1,13 +1,22 @@
 // src/services/mockApi.ts
-import { Listing, JobStatus, CatalogueResult, PriceResult, ExportResult } from '../types/contracts';
+import { Listing, JobStatus, CatalogueResult, PriceResult, ExportResult, ImageJobResult, ListingService, ListingState } from '../types/contracts';
 
 const now = () => new Date().toISOString();
 
-export const mockApi = {
+interface MockJobRecord {
+  type: JobStatus['type'];
+  createdAt: number;
+  listingId: string;
+  photos?: string[];
+}
+
+const activeJobRegistry = new Map<string, MockJobRecord>();
+
+export const mockApi: ListingService = {
   createListing: async (payload: { preferred_language: string }) => ({
     id: 'listing_uuid_123',
     artisan_id: 'user_uuid_artisan',
-    state: 'draft',
+    state: 'draft' as ListingState,
     preferred_language: payload.preferred_language,
     upload_instructions: { token: 'opaque_upload_token' },
   }),
@@ -193,55 +202,91 @@ listListings: async (): Promise<Listing[]> => [
     media_id: `media_${payload.kind}_123`,
   }),
 
-  requestImageAnalysis: async (listingId: string, payload: { media_id: string }) => ({
-  job_id: 'job_image_123',
-}),
-
-  requestTranscription: async (listingId: string, payload: { audio_media_id: string; declared_language: string }) => ({
-    job_id: 'job_audio_123',
-  }),
-
-  getJobStatus: async (jobId: string): Promise<JobStatus> => ({
-    job_id: jobId,
-    type: jobId.includes('image') ? 'image_studio' : jobId.includes('audio') ? 'transcription' : 'catalogue_generation',
-    status: 'complete',
-    attempt: 1,
-    created_at: now(),
-    updated_at: now(),
-  }),
-
-  getImageJobResult: async (jobId: string) => ({
-  job_id: jobId,
-  status: 'complete' as const,
-  quality: {
-    overall: 'acceptable' as const,
-    blur: 'low' as const,
-    lighting: 'needs_correction' as const,
-    framing: 'acceptable' as const,
-    guidance: [] as string[],
+  requestImageAnalysis: async (listingId: string, payload: { media_id: string; photos?: string[] }) => {
+    const jobId = `job_image_${Date.now()}`;
+    activeJobRegistry.set(jobId, {
+      type: 'image_studio',
+      createdAt: Date.now(),
+      listingId,
+      photos: payload.photos,
+    });
+    return { job_id: jobId };
   },
-  original_url: 'https://placehold.co/400x400/EDE7DD/2B2320?text=Original',
-  enhanced_media_id: 'media_enhanced_uuid',
-  enhanced_url: 'https://placehold.co/400x400/FFF8F0/2B2320?text=Enhanced',
-  transformations: ['background_neutralization', 'white_balance', 'crop'],
-  human_review_required: false,
-}),
+
+  requestTranscription: async (listingId: string, payload: { audio_media_id: string; declared_language: string }) => {
+    const jobId = `job_audio_${Date.now()}`;
+    activeJobRegistry.set(jobId, {
+      type: 'transcription',
+      createdAt: Date.now(),
+      listingId,
+    });
+    return { job_id: jobId };
+  },
+
+  getJobStatus: async (jobId: string): Promise<JobStatus> => {
+    const job = activeJobRegistry.get(jobId);
+    const elapsed = job ? Date.now() - job.createdAt : 5000;
+    let status: JobStatus['status'] = 'complete';
+
+    // Realistic asynchronous timing:
+    // 0 - 1500ms: queued (uploading camera frames / media server ingest)
+    // 1500 - 3600ms: processing (AI Image Studio neural background neutralization & daylight calibration)
+    // > 3600ms: complete (ready to fetch results)
+    if (elapsed < 1500) {
+      status = 'queued';
+    } else if (elapsed < 3600) {
+      status = 'processing';
+    } else {
+      status = 'complete';
+    }
+
+    return {
+      job_id: jobId,
+      type: job?.type ?? (jobId.includes('image') ? 'image_studio' : jobId.includes('audio') ? 'transcription' : 'catalogue_generation'),
+      status,
+      attempt: 1,
+      created_at: job ? new Date(job.createdAt).toISOString() : now(),
+      updated_at: now(),
+    };
+  },
+
+  getImageJobResult: async (jobId: string): Promise<ImageJobResult> => {
+    const job = activeJobRegistry.get(jobId);
+
+    return {
+      job_id: jobId,
+      status: 'complete',
+      quality: {
+        overall: 'acceptable',
+        blur: 'low',
+        lighting: 'acceptable',
+        framing: 'acceptable',
+        guidance: [],
+      },
+      original_url: job?.photos?.[0] || '',
+      enhanced_media_id: `media_enhanced_${jobId}`,
+      enhanced_url: '',
+      enhanced_urls: [],
+      transformations: [],
+      human_review_required: false,
+    };
+  },
 
   requestCatalogueGeneration: async (listingId: string, payload: any): Promise<CatalogueResult> => ({
     schema_version: '1.0.0',
     catalogue: {
       listing_id: listingId,
-      category: 'handloom_saree',
-      materials: ['cotton'],
-      techniques: ['handloom_weave'],
-      title: { en: 'Cotton handloom saree', local: 'ಹತ್ತಿ ಕೈಮಗ್ಗ ಸೀರೆ', local_language: 'kn' },
-      description: { en: 'Beautiful woven saree.', local: 'ಸುಂದರವಾದ ಸೀರೆ.' },
-      labour: { hours: 12, skill_level: 'skilled', state_code: 'KA' },
+      category: '',
+      materials: [],
+      techniques: [],
+      title: { en: '', local: '', local_language: 'kn' },
+      description: { en: '', local: '' },
+      labour: { hours: 0, skill_level: 'skilled', state_code: 'KA' },
       material_cost_paise: 80000,
       provenance: { claims: [], gi_tag: null },
       source: { transcript_id: 'transcript_uuid', asr_confidence: 0.86 },
     },
-    field_confidence: { category: 0.91, materials: 0.82, techniques: 0.61, 'labour.hours': 0.74 },
+    field_confidence: { category: 0.5, materials: 0.5, techniques: 0.5, 'labour.hours': 0.5 },
     needs_confirmation: ['techniques', 'labour.hours'],
   }),
 

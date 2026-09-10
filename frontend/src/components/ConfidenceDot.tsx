@@ -4,9 +4,7 @@ import { View, StyleSheet, StyleProp, ViewStyle } from 'react-native';
 import { colors } from '../theme';
 
 export const getConfidenceColor = (score: number) => {
-  if (score >= 0.85) return colors.success;
-  if (score >= 0.65) return colors.accent;
-  return colors.error;
+  return score >= 0.85 ? colors.text : colors.border;
 };
 
 interface ConfidenceDotProps {
@@ -15,11 +13,12 @@ interface ConfidenceDotProps {
 }
 
 export default function ConfidenceDot({ confidence, style }: ConfidenceDotProps) {
+  const isHigh = confidence >= 0.85;
   return (
     <View
       style={[
-        styles.confidenceDot,
-        { backgroundColor: getConfidenceColor(confidence) },
+        styles.dot,
+        isHigh ? styles.dotFilled : styles.dotOutlined,
         style,
       ]}
     />
@@ -27,5 +26,17 @@ export default function ConfidenceDot({ confidence, style }: ConfidenceDotProps)
 }
 
 const styles = StyleSheet.create({
-  confidenceDot: { width: 12, height: 12, borderRadius: 6 },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  dotFilled: {
+    backgroundColor: colors.text,
+  },
+  dotOutlined: {
+    borderWidth: 1.5,
+    borderColor: colors.textMuted,
+    backgroundColor: 'transparent',
+  },
 });
