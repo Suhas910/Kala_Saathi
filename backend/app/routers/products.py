@@ -30,3 +30,17 @@ def add_product(
     db.refresh(new_product)
 
     return new_product
+
+@router.get("/users/{user_id}/all-products")
+def get_products(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    # Any authenticated user can view products for an existing user.
+    user = db.query(models.User).filter_by(user_id=user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    products = db.query(models.Product).filter_by(user_id=user_id).all()
+    return products
