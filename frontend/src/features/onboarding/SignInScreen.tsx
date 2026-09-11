@@ -6,6 +6,7 @@ import * as SecureStore from 'expo-secure-store';
 import { useAuthStore } from '../../store/authStore';
 import { UserRole } from '../../types/contracts';
 import { colors, spacing } from '../../theme';
+import { service } from '../../services';
 
 export default function SignInScreen() {
   const setAuth = useAuthStore((state) => state.setAuth);
@@ -14,10 +15,10 @@ export default function SignInScreen() {
   const handleDemoLogin = async (role: UserRole) => {
     setLoadingRole(role);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 400));
-      const mockToken = `demo_token_${role}_123`;
-      const mockUserId = `user_uuid_${role}`;
-      await setAuth(mockToken, role, mockUserId);
+      // NOTE: Hackathon demo auth pattern. Calls service.login which uses mock token in mockApi,
+      // or logs into/registers seeded demo accounts against the live backend in liveApi.
+      const authResult = await service.login(role);
+      await setAuth(authResult.access_token, authResult.role, authResult.user_id);
     } catch (error) {
       console.error('Login failed', error);
     } finally {

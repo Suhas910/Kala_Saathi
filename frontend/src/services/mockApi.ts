@@ -1,5 +1,5 @@
 // src/services/mockApi.ts
-import { Listing, JobStatus, CatalogueResult, PriceResult, ExportResult, ImageJobResult, ListingService, ListingState } from '../types/contracts';
+import { Listing, JobStatus, CatalogueResult, PriceResult, ExportResult, ImageJobResult, ListingService, ListingState, UserRole, Claim } from '../types/contracts';
 
 const now = () => new Date().toISOString();
 
@@ -10,7 +10,13 @@ interface MockJobRecord {
   photos?: string[];
 }
 
+interface MockListingOverride {
+  state?: ListingState;
+  claims?: Claim[];
+}
+
 const activeJobRegistry = new Map<string, MockJobRecord>();
+const mockListingRegistry = new Map<string, MockListingOverride>();
 
 export const mockApi: ListingService = {
   createListing: async (payload: { preferred_language: string }) => ({
@@ -184,18 +190,21 @@ listListings: async (): Promise<Listing[]> => [
   listing_id: listingId,
 }),
 
-  getListing: async (listingId: string): Promise<Listing> => ({
-    id: listingId,
-    artisan_id: 'user_uuid_artisan',
-    state: 'awaiting_confirmation',
-    preferred_language: 'kn',
-    media: [{ id: 'media_1', kind: 'image', variant: 'enhanced', status: 'complete' }],
-    catalogue: null,
-    price: null,
-    claims: [{ claim: 'handloom_weave', asserted_by_artisan: true, coordinator_verified: false, evidence_note: null }],
-    created_at: now(),
-    updated_at: now(),
-  }),
+  getListing: async (listingId: string): Promise<Listing> => {
+    const override = mockListingRegistry.get(listingId);
+    return {
+      id: listingId,
+      artisan_id: 'user_uuid_artisan',
+      state: override?.state ?? (listingId === 'listing_004' ? 'approved' : 'awaiting_confirmation'),
+      preferred_language: 'kn',
+      media: [{ id: 'media_1', kind: 'image', variant: 'enhanced', status: 'complete' }],
+      catalogue: null,
+      price: null,
+      claims: override?.claims ?? [],
+      created_at: now(),
+      updated_at: now(),
+    };
+  },
 
   completeMediaUpload: async (listingId: string, payload: { kind: string; upload_token: string; client_checksum: string }) => ({
     status: 'success',
@@ -319,18 +328,35 @@ listListings: async (): Promise<Listing[]> => [
     explanation: 'No verified wage notification is available for this state yet.',
   }),
 
-  reviewClaim: async (listingId: string, claim: string, payload: { decision: string; evidence_note: string; reason: string | null }) => ({
-    claim,
-    coordinator_verified: payload.decision === 'verified',
-    evidence_note: payload.evidence_note,
-  }),
+  reviewClaim: async (listingId: string, claim: string, payload: { decision: string; evidence_note: string; reason: string | null }) => {
+    const isVerified = payload.decision === 'verified';
+    const existing = mockListingRegistry.get(listingId) || {};
+    const existingClaims = existing.claims || [
+      { claim: 'handloom_weave', asserted_by_artisan: true, coordinator_verified: false, evidence_note: null },
+      { claim: 'natural_dye', asserted_by_artisan: true, coordinator_verified: false, evidence_note: null },
+    ];
+    const updatedClaims = existingClaims.map((c) =>
+      c.claim === claim ? { ...c, coordinator_verified: isVerified, evidence_note: payload.evidence_note } : c
+    );
+    mockListingRegistry.set(listingId, { ...existing, claims: updatedClaims });
+    return {
+      claim,
+      coordinator_verified: isVerified,
+      evidence_note: payload.evidence_note,
+    };
+  },
 
   submitForApproval: async (listingId: string) => ({ status: 'awaiting_approval' }),
 
-  decideApproval: async (listingId: string, payload: { decision: string; reason: string }) => ({
-    status: payload.decision === 'approved' ? 'approved' : 'rejected',
-    reason: payload.reason,
-  }),
+  decideApproval: async (listingId: string, payload: { decision: string; reason: string }) => {
+    const nextState = (payload.decision === 'approved' ? 'approved' : 'rejected') as ListingState;
+    const existing = mockListingRegistry.get(listingId) || {};
+    mockListingRegistry.set(listingId, { ...existing, state: nextState });
+    return {
+      status: nextState,
+      reason: payload.reason,
+    };
+  },
 
   requestExport: async (listingId: string, payload: { target: string; schema_version: string; simulate_network_submission?: boolean }): Promise<ExportResult> => ({
     export_id: `export_${listingId}`,
@@ -340,5 +366,11 @@ listListings: async (): Promise<Listing[]> => [
     contract_validation: { passed: true, schema_source: 'ONDC Protocol Spec v1.2.0' },
     // Build guide: Never use 'syncing to ONDC' theatre for local gateway. Default: 'not_attempted'
     network_submission: payload.simulate_network_submission ? 'success' : 'not_attempted',
+  }),
+
+  login: async (role: UserRole): Promise<{ access_token: string; role: UserRole; user_id: string }> => ({
+    access_token: `demo_token_${role}_123`,
+    role,
+    user_id: `user_uuid_${role}`,
   }),
 };
