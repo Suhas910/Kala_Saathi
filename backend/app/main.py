@@ -1,62 +1,119 @@
-from fastapi import Depends, FastAPI, HTTPException
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy.orm import Session
+# backend/app/main.py
+import uuid
+from fastapi import FastAPI, Request, HTTPException, status
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
 
-from . import auth, models, schemas
-from .database import get_db, Base, engine
+from .database import engine, Base
+from .routers import auth as auth_router, listings, ai, coordinator, products, images
 
+# Initialize Database Schema
 Base.metadata.create_all(bind=engine)
-app = FastAPI()
 
-security = HTTPBearer()
+app = FastAPI(
+    title="Karigari Connect API",
+    description="AI-Driven Market Linkage and Smart Cataloging Mobile Backend for Marginalized Artisans (SIH 2026 PS 26090)",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc"
+)
 
-def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db),
-):
-    token = credentials.credentials  # extract token from header
-    payload = auth.verify_token(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+# CORS Middleware for React Native / Web Clients
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-    user = db.query(models.User).filter(models.User.username == payload["sub"]).first()
-    return user
+# --- Standardized Error Response Handler matching contracts.ts ---
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    request_id = str(uuid.uuid4())
+    detail = exc.detail
+    code = "PROVIDER_UNAVAILABLE"
+    message = str(detail)
+    recoverable = True
+    action = "Retry the operation or contact support."
 
+    if isinstance(detail, dict):
+        code = detail.get("code", "LISTING_STATE_INVALID")
+        message = detail.get("message", str(detail))
+        recoverable = detail.get("recoverable", True)
+        action = detail.get("action", "")
+    elif exc.status_code == 401:
+        code = "PROVIDER_UNAVAILABLE"
+        message = str(detail)
+        action = "Please log in again."
+    elif exc.status_code == 403:
+        code = "PROVENANCE_VERIFICATION_REQUIRED"
+        message = str(detail)
+        action = "Coordinator credentials required."
+    elif exc.status_code == 404:
+        code = "LISTING_STATE_INVALID"
+        message = str(detail)
+        action = "Check the requested resource identifier."
+    elif exc.status_code == 422:
+        code = "CATALOGUE_SCHEMA_INVALID"
+
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "request_id": request_id,
+            "error": {
+                "code": code,
+                "message": message,
+                "recoverable": recoverable,
+                "action": action
+            }
+        }
+    )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    request_id = str(uuid.uuid4())
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={
+            "request_id": request_id,
+            "error": {
+                "code": "CATALOGUE_SCHEMA_INVALID",
+                "message": str(exc),
+                "recoverable": True,
+                "action": "Correct the payload fields to match schema specification."
+            }
+        }
+    )
+
+# --- HEALTH CHECK ENDPOINTS ---
 @app.get("/")
-async def read_root():
-    return {"Hello": "World"}
+async def root():
+    return {
+        "service": "Karigari Connect Backend API",
+        "status": "online",
+        "version": "1.0.0",
+        "sih_ps": "26090",
+        "theme": "Heritage & Culture",
+        "docs": "/docs"
+    }
 
-@app.post("/register")
-def register(user: schemas.UserRegister, db: Session = Depends(get_db)):
-    # check if username already exists
-    existing = (
-        db.query(models.User).filter(models.User.username == user.username).first()
-    )
-    if existing:
-        raise HTTPException(status_code=400, detail="Username already taken")
+@app.get("/health")
+@app.get("/api/v1/health")
+async def health_check():
+    return {"status": "ok", "service": "karigari-connect-backend"}
 
-    new_user = models.User(
-        username=user.username,
-        email=user.email,
-        hashed_password=auth.hash_password(user.password),  # hash before saving
-    )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    return new_user
+# --- V1 ROUTER REGISTRATION ---
+app.include_router(auth_router.router, prefix="/api/v1")
+app.include_router(listings.router, prefix="/api/v1")
+app.include_router(ai.router, prefix="/api/v1")
+app.include_router(coordinator.router, prefix="/api/v1")
 
-@app.post("/login")
-def login(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
-    user = (
-        db.query(models.User)
-        .filter(models.User.username == credentials.username)
-        .first()
-    )
-
-    # check user exists and password matches
-    if not user or not auth.verify_password(credentials.password, user.hashed_password):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-
-    # generate token with user info inside
-    token = auth.create_token({"sub": user.username, "id": user.user_id})
-    return {"access_token": token, "token_type": "bearer"}
+# --- ROOT & BACKWARDS COMPATIBILITY ROUTERS ---
+app.include_router(auth_router.router)
+app.include_router(listings.router)
+app.include_router(ai.router)
+app.include_router(coordinator.router)
+app.include_router(products.router)
+app.include_router(images.router)
