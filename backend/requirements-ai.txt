@@ -1,0 +1,32 @@
+# CraftLink AI modules. Install alongside requirements.txt:
+#
+#     pip install -r requirements.txt -r requirements-ai.txt
+#
+# Kept separate from the API's dependencies on purpose. OpenCV and CTranslate2 are
+# large native wheels, and a machine that only runs the FastAPI service has no reason
+# to carry them. Verified on Python 3.14.3 (macOS arm64).
+
+# --- contracts and validation
+pydantic==2.13.5          # AI boundary types (app/ai/contracts.py)
+jsonschema==4.26.0        # listing schema + the ONDC contract test
+
+# --- vision (photo quality assessor, image studio)
+# Headless: no GUI bindings, which is what a server wants and roughly halves the wheel.
+opencv-python-headless==5.0.0.93
+numpy==2.5.3
+pillow==12.3.0
+
+# --- ONDC schema extraction (app/ai/linkage/fetch_ondc_schema.py)
+# Only needed to regenerate schemas/on_search.json; the committed schema is plain JSON,
+# so the contract test itself does not need this.
+PyYAML==6.0.3
+
+# --- local speech recognition (credential-free fallback)
+# Optional. `LocalWhisperASRAdapter.is_available()` returns False without it and the
+# registry falls through to the next provider, so the suite passes either way.
+# First use downloads model weights from Hugging Face; no account or token is required,
+# though an anonymous download is rate-limited.
+faster-whisper==1.2.1
+
+# --- tests
+pytest==9.1.1

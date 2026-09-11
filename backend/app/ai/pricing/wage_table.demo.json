@@ -1,0 +1,22 @@
+{
+  "$comment": "DEMO FIXTURE. NOT SOURCED FROM ANY GOVERNMENT NOTIFICATION. These rates exist only so the price engine can be exercised end to end before the real notifications are transcribed. Every notification_ref below is stamped so that the value is identifiable as a fixture in the API response itself, not merely in this file. Loaded only when CRAFTLINK_WAGE_TABLE=demo is set explicitly; the shipped wage_table.json remains empty and is the only file that may ever carry real rates.",
+  "is_demo_fixture": true,
+  "unit": "INR_per_8h_day",
+  "hours_per_day": 8,
+  "states": {
+    "KA": {
+      "state_name": "Karnataka",
+      "source_url": "unsourced://demo-fixture",
+      "notification_ref": "DEMO-FIXTURE-NOT-A-REAL-NOTIFICATION",
+      "effective_from": null,
+      "rates": { "unskilled": 500, "semi_skilled": 560, "skilled": 620, "highly_skilled": 700 }
+    },
+    "TN": {
+      "state_name": "Tamil Nadu",
+      "source_url": "unsourced://demo-fixture",
+      "notification_ref": "DEMO-FIXTURE-NOT-A-REAL-NOTIFICATION",
+      "effective_from": null,
+      "rates": { "unskilled": 480, "semi_skilled": 540, "skilled": 600, "highly_skilled": 680 }
+    }
+  }
+}

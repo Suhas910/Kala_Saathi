@@ -1,0 +1,42 @@
+{
+  "$comment": "Statutory minimum wage rates, by state and skill level, in INR per 8-hour day. DELIBERATELY UNPOPULATED. Rates must be transcribed from each state's official minimum-wage notification (or the Chief Labour Commissioner's central-sphere notification) and the source URL and effective date recorded alongside. A wrong wage rate silently produces a wrong floor on every listing in that state, which defeats the entire point of the mechanism. The engine refuses to price when a rate is missing rather than falling back to a guess.",
+  "unit": "INR_per_8h_day",
+  "hours_per_day": 8,
+  "states": {
+    "KA": {
+      "state_name": "Karnataka",
+      "source_url": null,
+      "notification_ref": null,
+      "effective_from": null,
+      "rates": { "unskilled": null, "semi_skilled": null, "skilled": null, "highly_skilled": null }
+    },
+    "TN": {
+      "state_name": "Tamil Nadu",
+      "source_url": null,
+      "notification_ref": null,
+      "effective_from": null,
+      "rates": { "unskilled": null, "semi_skilled": null, "skilled": null, "highly_skilled": null }
+    },
+    "UP": {
+      "state_name": "Uttar Pradesh",
+      "source_url": null,
+      "notification_ref": null,
+      "effective_from": null,
+      "rates": { "unskilled": null, "semi_skilled": null, "skilled": null, "highly_skilled": null }
+    },
+    "WB": {
+      "state_name": "West Bengal",
+      "source_url": null,
+      "notification_ref": null,
+      "effective_from": null,
+      "rates": { "unskilled": null, "semi_skilled": null, "skilled": null, "highly_skilled": null }
+    },
+    "RJ": {
+      "state_name": "Rajasthan",
+      "source_url": null,
+      "notification_ref": null,
+      "effective_from": null,
+      "rates": { "unskilled": null, "semi_skilled": null, "skilled": null, "highly_skilled": null }
+    }
+  }
+}

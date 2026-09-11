@@ -1,0 +1,103 @@
+{
+  "$comment": "Seed taxonomy for SIH26090 / CraftLink. Controlled vocabularies that constrain generation. Extend before the pilot; every value added here must be verifiable, because listing claims are validated against these lists.",
+  "version": "0.1.0",
+  "categories": [
+    {
+      "id": "handloom_saree",
+      "label_en": "Handloom saree",
+      "materials": ["silk", "cotton", "silk_cotton_blend", "tussar_silk", "linen"],
+      "techniques": ["handloom_weave", "jacquard", "extra_weft", "ikat", "jamdani"],
+      "dimensions": ["length_m", "width_m"],
+      "gi_eligible": true
+    },
+    {
+      "id": "stole_dupatta",
+      "label_en": "Stole or dupatta",
+      "materials": ["silk", "cotton", "wool", "linen"],
+      "techniques": ["handloom_weave", "block_print", "tie_dye", "embroidery"],
+      "dimensions": ["length_m", "width_m"],
+      "gi_eligible": true
+    },
+    {
+      "id": "terracotta_vessel",
+      "label_en": "Terracotta vessel",
+      "materials": ["terracotta_clay", "stoneware_clay"],
+      "techniques": ["wheel_thrown", "hand_built", "coil_built", "slip_decorated"],
+      "dimensions": ["height_cm", "diameter_cm"],
+      "gi_eligible": true
+    },
+    {
+      "id": "cane_bamboo_basket",
+      "label_en": "Cane or bamboo basket",
+      "materials": ["cane", "bamboo", "sikki_grass", "screwpine"],
+      "techniques": ["hand_woven", "coiled", "twill_plait"],
+      "dimensions": ["height_cm", "diameter_cm"],
+      "gi_eligible": true
+    },
+    {
+      "id": "brass_metalware",
+      "label_en": "Brass or bell-metal ware",
+      "materials": ["brass", "bell_metal", "copper"],
+      "techniques": ["sand_cast", "lost_wax_cast", "hand_beaten", "engraved"],
+      "dimensions": ["height_cm", "diameter_cm", "weight_g"],
+      "gi_eligible": true
+    },
+    {
+      "id": "wood_carving",
+      "label_en": "Wood carving",
+      "materials": ["sheesham", "teak", "mango_wood", "sandalwood"],
+      "techniques": ["hand_carved", "inlay", "lacquered", "turned"],
+      "dimensions": ["height_cm", "width_cm", "depth_cm"],
+      "gi_eligible": true
+    },
+    {
+      "id": "leather_goods",
+      "label_en": "Leather goods",
+      "materials": ["vegetable_tanned_leather", "goat_leather", "camel_leather"],
+      "techniques": ["hand_stitched", "punched", "painted", "embossed"],
+      "dimensions": ["height_cm", "width_cm"],
+      "gi_eligible": true
+    },
+    {
+      "id": "embroidered_textile",
+      "label_en": "Embroidered textile",
+      "materials": ["cotton", "silk", "wool"],
+      "techniques": ["hand_embroidery", "mirror_work", "applique", "quilting"],
+      "dimensions": ["length_m", "width_m"],
+      "gi_eligible": true
+    }
+  ],
+  "finishes": ["natural_dye", "azo_free_dye", "undyed", "lacquer", "wax_polish", "none"],
+  "condition": ["new", "made_to_order"],
+  "claim_verification": {
+    "$comment": "Any claim in this list may only appear on a published listing when the artisan asserted it AND a coordinator marked it verified. This is the mechanism behind the provenance guarantee.",
+    "requires_coordinator_verification": [
+      "gi_tag",
+      "handloom_weave",
+      "hand_embroidery",
+      "natural_dye",
+      "lost_wax_cast",
+      "hand_carved"
+    ]
+  },
+  "gi_registry": {
+    "$comment": "PLACEHOLDER. Populate from the official GI Registry (ipindia.gov.in) before the pilot. Do not ship invented entries — a wrong GI claim is a legal problem, not a cosmetic one.",
+    "entries": []
+  },
+  "complexity_multipliers": {
+    "$comment": "Applied to the wage floor to produce the fair price. Values are a starting proposal to be calibrated with cluster coordinators, not measured constants.",
+    "default": 1.15,
+    "by_technique": {
+      "handloom_weave": 1.30,
+      "jamdani": 1.45,
+      "ikat": 1.40,
+      "lost_wax_cast": 1.35,
+      "hand_embroidery": 1.30,
+      "hand_carved": 1.30,
+      "block_print": 1.20,
+      "wheel_thrown": 1.15,
+      "hand_woven": 1.15,
+      "sand_cast": 1.10
+    }
+  }
+}

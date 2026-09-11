@@ -7,8 +7,27 @@ from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
 from .. import models, schemas
+from . import config
 from .gemini_client import gemini_client
+from .provenance_gate import enforce_catalogue
+from .pricing import bridge as price_bridge
+from .pricing.engine import InvalidPricingInput, WageRateUnavailable
 
+# LEGACY. Used only when CRAFTLINK_PRICE_ENGINE=legacy.
+#
+# Two problems, both verified rather than assumed, and both the reason the default is
+# now the deterministic engine in pricing/bridge.py:
+#
+#   1. skill_level never reaches this table. There is one rate per state, so unskilled
+#      and highly_skilled price identically, and the deck's "state statutory skilled
+#      wage" claim is not what the code computes.
+#   2. The source URLs below do not resolve to notifications. Checked 2026-09-11:
+#      UP 404, TN 404, RJ does not resolve; the rest are site roots. The references
+#      (KLS-2025-WAGE-44 and so on) cannot be checked against a published document.
+#
+# Do not add rates here. The deterministic engine reads pricing/wage_table.json, which
+# ships empty by design and refuses to price until a real notification is transcribed
+# into it with its source URL and effective date.
 STATUTORY_WAGES: Dict[str, Dict[str, Any]] = {
     "KA": {
         "state_code": "KA",
@@ -249,6 +268,26 @@ class AIService:
             )
         )
 
+        # --- Provenance gate -------------------------------------------------
+        # Runs on whatever produced the catalogue -- model, fixture, anything. A
+        # sensitive claim needs an artisan assertion AND a coordinator verification
+        # before it may be published, and a generator cannot assert on an artisan's
+        # behalf. Without this, an unverified GI identifier reaches a buyer.
+        provenance_report = None
+        if config.enforce_provenance():
+            gated, provenance_report = enforce_catalogue(
+                catalogue_draft.model_dump(), generated=True
+            )
+            catalogue_draft = schemas.CatalogueDraft(**{
+                k: v for k, v in gated.items() if k in schemas.CatalogueDraft.model_fields
+            })
+            # A claim held back for review is a thing the artisan must be told about,
+            # so it belongs in needs_confirmation rather than only in a log.
+            for claim_name in provenance_report["unpublishable_claims"]:
+                field = f"provenance.{claim_name}"
+                if field not in needs_confirmation:
+                    needs_confirmation.append(field)
+
         result = schemas.CatalogueResult(
             schema_version="1.0",
             catalogue=catalogue_draft,
@@ -272,8 +311,10 @@ class AIService:
             )
             db.add(new_cat)
 
-        # Sync claims into listing
-        for c in claims_list:
+        # Sync claims into listing, from the gated catalogue so a downgraded
+        # assertion is not silently re-asserted at the database layer.
+        gated_claims = catalogue_draft.provenance.claims
+        for c in gated_claims:
             existing_claim = db.query(models.ClaimModel).filter(
                 models.ClaimModel.listing_id == listing_id,
                 models.ClaimModel.claim == c.claim
@@ -299,7 +340,8 @@ class AIService:
         labour_hours: Optional[float],
         skill_level: Optional[str],
         state_code: Optional[str],
-        db: Session
+        db: Session,
+        comparables_paise: Optional[List[int]] = None,
     ) -> schemas.PriceResult:
         listing = db.query(models.ListingModel).filter(models.ListingModel.id == listing_id).first()
         if not listing:
@@ -319,6 +361,18 @@ class AIService:
                 state_code = state_code or "KA"
 
         state_code = (state_code or "KA").upper()
+
+        if config.use_deterministic_pricing():
+            return AIService._deterministic_price(
+                listing_id=listing_id,
+                material_cost_paise=int(material_cost_paise),
+                labour_hours=float(labour_hours),
+                skill_level=skill_level or "skilled",
+                state_code=state_code,
+                comparables_paise=comparables_paise or [],
+                db=db,
+            )
+
         if state_code not in STATUTORY_WAGES:
             raise HTTPException(
                 status_code=422,
@@ -411,5 +465,108 @@ class AIService:
 
         db.commit()
         return price_result
+    # ------------------------------------------------------------------ deterministic
+
+    @staticmethod
+    def _techniques_for(listing_id: str, db: Session) -> List[str]:
+        """Techniques drive the complexity multiplier, so read them if a catalogue exists."""
+        cat = db.query(models.CatalogueModel).filter(
+            models.CatalogueModel.listing_id == listing_id
+        ).first()
+        if not cat or not cat.catalogue_data:
+            return []
+        try:
+            return list(json.loads(cat.catalogue_data).get("techniques") or [])
+        except (ValueError, AttributeError):
+            return []
+
+    @staticmethod
+    def _deterministic_price(
+        *,
+        listing_id: str,
+        material_cost_paise: int,
+        labour_hours: float,
+        skill_level: str,
+        state_code: str,
+        comparables_paise: List[int],
+        db: Session,
+    ) -> schemas.PriceResult:
+        """Price through the tested engine in pricing/engine.py.
+
+        Differs from the legacy path in three ways that matter to the pitch:
+        skill_level is a real lookup key, comparables may lift the band but never lower
+        it, and a missing wage notification refuses instead of substituting an estimate.
+        """
+        try:
+            payload = price_bridge.calculate(
+                material_cost_paise=material_cost_paise,
+                labour_hours=labour_hours,
+                skill_level=skill_level,
+                state_code=state_code,
+                techniques=AIService._techniques_for(listing_id, db),
+                comparables_paise=comparables_paise,
+            )
+        except WageRateUnavailable as exc:
+            # Deliberately fatal. The alternative is a floor that looks authoritative
+            # and is not, which is the one error an artisan cannot detect.
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "WAGE_RATE_UNAVAILABLE",
+                    "message": str(exc).replace("\n", " "),
+                    "recoverable": True,
+                    "action": (
+                        "Transcribe the state minimum-wage notification into "
+                        "app/ai/pricing/wage_table.json with its source URL and effective "
+                        "date. For a demo, set CRAFTLINK_WAGE_TABLE=demo."
+                    ),
+                },
+            ) from exc
+        except InvalidPricingInput as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "CATALOGUE_SCHEMA_INVALID",
+                    "message": str(exc),
+                    "recoverable": True,
+                    "action": "Correct the labour hours, skill level or material cost.",
+                },
+            ) from exc
+
+        result = schemas.PriceResult(**payload)
+        AIService._persist_price(listing_id, payload, db)
+        return result
+
+    @staticmethod
+    def _persist_price(listing_id: str, payload: Dict[str, Any], db: Session) -> None:
+        source = payload["wage_source"]
+        inputs = payload["inputs"]
+        fields = dict(
+            calculation_version=payload["calculation_version"],
+            status=payload["status"],
+            currency=payload["currency"],
+            state_code=source["state_code"],
+            notification_ref=source["notification_ref"],
+            effective_from=source["effective_from"],
+            source_url=source["source_url"],
+            material_cost_paise=inputs["material_cost_paise"],
+            labour_hours=inputs["labour_hours"],
+            hourly_wage_paise=inputs["hourly_wage_paise"],
+            skill_level=inputs["skill_level"],
+            floor_amount_paise=payload["floor_amount_paise"],
+            recommended_low_paise=payload["recommended_low_paise"],
+            recommended_high_paise=payload["recommended_high_paise"],
+            explanation=payload["explanation"],
+        )
+        existing = db.query(models.PriceCalculationModel).filter(
+            models.PriceCalculationModel.listing_id == listing_id
+        ).first()
+        if existing:
+            for key, value in fields.items():
+                setattr(existing, key, value)
+        else:
+            db.add(models.PriceCalculationModel(listing_id=listing_id, **fields))
+        db.commit()
+
 
 ai_service = AIService()

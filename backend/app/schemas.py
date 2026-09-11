@@ -158,6 +158,9 @@ class PriceInputs(BaseModel):
     skill_level: str
 
 class PriceResult(BaseModel):
+    # "2.0.0-deterministic" identifies the tested engine in app/ai/pricing/engine.py;
+    # "1.0" is the legacy path. The version travels with every stored calculation so a
+    # price can always be traced to the formula that produced it.
     calculation_version: str = "1.0"
     status: str = "available"  # 'available' | 'unavailable'
     currency: str = "INR"
@@ -173,6 +176,11 @@ class PriceRequest(BaseModel):
     labour_hours: Optional[float] = None
     skill_level: Optional[str] = "skilled"
     state_code: Optional[str] = "KA"
+    # Observed market prices for comparable pieces. They may lift the recommended band
+    # and can never lower the floor -- that asymmetry is the anti-exploitation
+    # guarantee, so this is an input the engine deliberately treats as one-directional.
+    # Only honoured by the deterministic engine (CRAFTLINK_PRICE_ENGINE=deterministic).
+    comparables_paise: Optional[List[int]] = None
 
 # --- Listing Schemas ---
 class CreateListingRequest(BaseModel):

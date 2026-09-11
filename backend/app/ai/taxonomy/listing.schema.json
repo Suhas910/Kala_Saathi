@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://craftlink.example/schemas/listing.schema.json",
+  "title": "CraftLink listing",
+  "description": "The ONLY structure the generation layer may emit. Every provenance-bearing field is an enum drawn from craft_taxonomy.json, so the model cannot invent a craft, material, technique or GI claim. Free prose is confined to fields that carry no verifiable claim.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["listing_id", "category", "materials", "techniques", "title", "description", "labour", "provenance", "source"],
+  "properties": {
+    "listing_id": { "type": "string", "minLength": 1 },
+
+    "category": {
+      "description": "Must match a category id in craft_taxonomy.json.",
+      "type": "string",
+      "enum": ["handloom_saree", "stole_dupatta", "terracotta_vessel", "cane_bamboo_basket",
+               "brass_metalware", "wood_carving", "leather_goods", "embroidered_textile"]
+    },
+
+    "materials": {
+      "type": "array", "minItems": 1, "maxItems": 4, "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": ["silk", "cotton", "silk_cotton_blend", "tussar_silk", "linen", "wool",
+                 "terracotta_clay", "stoneware_clay", "cane", "bamboo", "sikki_grass", "screwpine",
+                 "brass", "bell_metal", "copper", "sheesham", "teak", "mango_wood", "sandalwood",
+                 "vegetable_tanned_leather", "goat_leather", "camel_leather"]
+      }
+    },
+
+    "techniques": {
+      "type": "array", "minItems": 1, "maxItems": 4, "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": ["handloom_weave", "jacquard", "extra_weft", "ikat", "jamdani", "block_print",
+                 "tie_dye", "embroidery", "hand_embroidery", "mirror_work", "applique", "quilting",
+                 "wheel_thrown", "hand_built", "coil_built", "slip_decorated", "hand_woven",
+                 "coiled", "twill_plait", "sand_cast", "lost_wax_cast", "hand_beaten", "engraved",
+                 "hand_carved", "inlay", "lacquered", "turned", "hand_stitched", "punched",
+                 "painted", "embossed"]
+      }
+    },
+
+    "finish": {
+      "type": "string",
+      "enum": ["natural_dye", "azo_free_dye", "undyed", "lacquer", "wax_polish", "none"]
+    },
+
+    "dimensions": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "length_m":    { "type": "number", "exclusiveMinimum": 0, "maximum": 20 },
+        "width_m":     { "type": "number", "exclusiveMinimum": 0, "maximum": 20 },
+        "height_cm":   { "type": "number", "exclusiveMinimum": 0, "maximum": 500 },
+        "diameter_cm": { "type": "number", "exclusiveMinimum": 0, "maximum": 500 },
+        "depth_cm":    { "type": "number", "exclusiveMinimum": 0, "maximum": 500 },
+        "weight_g":    { "type": "number", "exclusiveMinimum": 0, "maximum": 100000 }
+      }
+    },
+
+    "title": {
+      "type": "object", "additionalProperties": false,
+      "required": ["en"],
+      "properties": {
+        "en":     { "type": "string", "minLength": 4, "maxLength": 90 },
+        "local":  { "type": "string", "minLength": 1, "maxLength": 120 },
+        "local_language": { "type": "string", "description": "ISO 639 code, e.g. hi, kn, bn" }
+      }
+    },
+
+    "description": {
+      "type": "object", "additionalProperties": false,
+      "required": ["en"],
+      "properties": {
+        "en":    { "type": "string", "minLength": 20, "maxLength": 900 },
+        "local": { "type": "string", "minLength": 1, "maxLength": 1200 }
+      }
+    },
+
+    "labour": {
+      "description": "Drives the wage floor. Hours come from the artisan's own account, not from a model estimate.",
+      "type": "object", "additionalProperties": false,
+      "required": ["hours", "skill_level", "state_code"],
+      "properties": {
+        "hours":       { "type": "number", "exclusiveMinimum": 0, "maximum": 2000 },
+        "skill_level": { "type": "string", "enum": ["unskilled", "semi_skilled", "skilled", "highly_skilled"] },
+        "state_code":  { "type": "string", "pattern": "^[A-Z]{2}$" }
+      }
+    },
+
+    "material_cost_inr": { "type": "number", "minimum": 0 },
+
+    "provenance": {
+      "description": "The guardrail. Any claim listed in taxonomy claim_verification MUST have asserted_by_artisan true AND coordinator_verified true before the listing may publish.",
+      "type": "object", "additionalProperties": false,
+      "required": ["claims"],
+      "properties": {
+        "claims": {
+          "type": "array",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["claim", "asserted_by_artisan", "coordinator_verified"],
+            "properties": {
+              "claim":                { "type": "string" },
+              "asserted_by_artisan":  { "type": "boolean" },
+              "coordinator_verified": { "type": "boolean" },
+              "evidence_note":        { "type": "string", "maxLength": 300 }
+            }
+          }
+        },
+        "gi_tag": {
+          "type": ["string", "null"],
+          "description": "Only settable when a matching verified claim exists and the value appears in the GI registry."
+        }
+      }
+    },
+
+    "source": {
+      "description": "Audit trail. Every generated listing records what it was derived from.",
+      "type": "object", "additionalProperties": false,
+      "required": ["transcript_id", "asr_confidence"],
+      "properties": {
+        "transcript_id":  { "type": "string", "minLength": 1 },
+        "asr_confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "asr_provider":   { "type": "string" },
+        "image_ids":      { "type": "array", "items": { "type": "string" } },
+        "low_confidence_fields": {
+          "type": "array", "items": { "type": "string" },
+          "description": "Fields below the confidence threshold. These are read back to the artisan for spoken confirmation."
+        }
+      }
+    },
+
+    "status": {
+      "type": "string",
+      "enum": ["draft", "awaiting_confirmation", "awaiting_approval", "published", "rejected"],
+      "default": "draft"
+    }
+  }
+}

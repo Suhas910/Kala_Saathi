@@ -1,0 +1,3 @@
+{
+  "$comment": "Maps an audio content hash (sha256, first 16 hex chars) to a fixture name, so the same recording always replays the same transcript. Populated when real consented audio samples are added to the evaluation set; until then callers pass an explicit key or set default_key. Unresolved audio raises rather than guessing."
+}

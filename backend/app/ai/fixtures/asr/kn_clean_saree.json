@@ -1,0 +1,9 @@
+{
+  "transcript_id": "T-FIXTURE-0001",
+  "detected_language": "kn",
+  "original_text": "ಇದು ಕೈಮಗ್ಗದ ರೇಷ್ಮೆ ಸೀರೆ. ಇದನ್ನು ನೇಯಲು ಅರವತ್ತು ಗಂಟೆ ಬೇಕಾಯಿತು.",
+  "english_translation": "This is a handloom silk saree. It took sixty hours to weave.",
+  "hindi_translation": "यह हथकरघे की रेशमी साड़ी है। इसे बुनने में साठ घंटे लगे।",
+  "overall_confidence": 0.93,
+  "low_confidence_spans": []
+}

@@ -1,0 +1,17 @@
+{
+  "transcript_id": "T-FIXTURE-0002",
+  "detected_language": "kn",
+  "original_text": "ಇದು ಕೈಮಗ್ಗದ ಸೀರೆ. ದಾರಕ್ಕೆ ನಾನೇ ಬಣ್ಣ ಹಾಕಿದ್ದೇನೆ.",
+  "english_translation": "This is a handloom saree. I dyed the thread myself.",
+  "hindi_translation": "यह हथकरघे की साड़ी है। धागे को मैंने खुद रंगा है।",
+  "overall_confidence": 0.71,
+  "low_confidence_spans": [
+    {
+      "text": "ಬಣ್ಣ",
+      "start_ms": 4100,
+      "end_ms": 4750,
+      "reason": "unclear_finish",
+      "confidence": 0.38
+    }
+  ]
+}

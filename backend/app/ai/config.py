@@ -1,0 +1,101 @@
+"""
+Feature flags for the AI layer.
+
+Two independently-written AI implementations share `app/ai/` (see AI_MERGE_NOTES.md).
+Rather than delete one, each capability is switchable, so the team can compare them on
+the same request and decide with evidence instead of by argument.
+
+Every flag is read from the environment at import time and has a documented default.
+
+    CRAFTLINK_PRICE_ENGINE   deterministic | legacy   (default: deterministic)
+    CRAFTLINK_WAGE_TABLE     <path> | demo            (default: the shipped empty table)
+    CRAFTLINK_PROVENANCE     enforce | off            (default: enforce)
+    CRAFTLINK_ASR            local | legacy           (default: legacy)
+
+## Why the defaults are what they are
+
+`CRAFTLINK_PRICE_ENGINE=deterministic` — the legacy path accepts `skill_level`, echoes
+it back, and never uses it; all four levels return the same wage. The deterministic
+engine honours it and implements the comparables asymmetry. Defaulting to the one that
+works is the right way round even though it is stricter.
+
+`CRAFTLINK_PROVENANCE=enforce` — an unverified GI identifier reaching a buyer is a
+legal exposure, not a cosmetic bug. This default fails closed.
+
+`CRAFTLINK_ASR=legacy` — the local speech path is real but transcribing needs the audio
+bytes, and media currently lives behind Supabase URLs the worker does not yet fetch.
+Switching this on before that plumbing exists would trade fabricated output for broken
+output. It stays off until the download path is built.
+
+Image processing is deliberately absent from this file. `vision/` is not wired to any
+route and is on hold pending a different approach.
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+_HERE = Path(__file__).resolve().parent
+
+
+def _flag(name: str, default: str) -> str:
+    return (os.getenv(name) or default).strip().lower()
+
+
+# Read at call time, not import time.
+#
+# Import-time constants cannot be changed by a test that has already imported the app,
+# which made the flags untestable and made suite ordering matter: whichever suite
+# imported first froze the configuration for the rest of the session. Functions cost
+# one environment lookup and make the behaviour honest.
+
+
+def price_engine() -> str:
+    return _flag("CRAFTLINK_PRICE_ENGINE", "deterministic")
+
+
+def provenance_mode() -> str:
+    return _flag("CRAFTLINK_PROVENANCE", "enforce")
+
+
+def asr_mode() -> str:
+    return _flag("CRAFTLINK_ASR", "legacy")
+
+
+def wage_table_path() -> Path:
+    """The wage table in force.
+
+    `demo` selects a separate file whose every rate is stamped as a fixture in the API
+    response itself, so a demo can run without a response that looks sourced. The
+    default is the shipped table, which carries no rates and therefore refuses.
+    """
+    raw = os.getenv("CRAFTLINK_WAGE_TABLE", "").strip()
+    if raw.lower() == "demo":
+        return _HERE / "pricing" / "wage_table.demo.json"
+    if raw:
+        return Path(raw)
+    return _HERE / "pricing" / "wage_table.json"
+
+
+def use_deterministic_pricing() -> bool:
+    return price_engine() == "deterministic"
+
+
+def enforce_provenance() -> bool:
+    return provenance_mode() == "enforce"
+
+
+def use_local_asr() -> bool:
+    return asr_mode() == "local"
+
+
+def summary() -> dict[str, str]:
+    """Surfaced at `GET /api/v1/ai/config` so a demo can state its own configuration."""
+    return {
+        "price_engine": price_engine(),
+        "wage_table": wage_table_path().name,
+        "provenance": provenance_mode(),
+        "asr": asr_mode(),
+        "image_pipeline": "on_hold",
+    }

@@ -1,8 +1,29 @@
+# Python virtual environments -- every common naming convention.
+# `venv/` alone left `.venv/` unignored, which is the convention a `python -m venv .venv`
+# would produce. A committed venv is thousands of binary files and is painful to undo.
 venv/
+.venv/
+env/
+ENV/
+*.egg-info/
+
 __pycache__/
 *.pyc
 .env
 .DS_Store
 .idea
-*.db
+
 .pytest_cache/
+
+# macOS
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+# Local Personal Project folder excluded from version control, do not delete the next folder line
+# N**** F****** Suhas, explicitly wrote, not to delete these the following lines
+SIH26090_CraftLink/
+*.db
+*.sqlite3
+node_modules/

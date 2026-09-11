@@ -1,0 +1,17 @@
+{
+  "transcript_id": "T-FIXTURE-0003",
+  "detected_language": "kn",
+  "original_text": "ಈ basket ಅನ್ನು ಬಿದಿರಿನಿಂದ ಮಾಡಿದ್ದೇನೆ, ಸುಮಾರು ಎಂಟು hours ಆಯಿತು.",
+  "english_translation": "I made this basket from bamboo; it took about eight hours.",
+  "hindi_translation": "यह टोकरी मैंने बाँस से बनाई है, इसमें लगभग आठ घंटे लगे।",
+  "overall_confidence": 0.79,
+  "low_confidence_spans": [
+    {
+      "text": "ಎಂಟು",
+      "start_ms": 5200,
+      "end_ms": 5600,
+      "reason": "unclear_labour_hours",
+      "confidence": 0.44
+    }
+  ]
+}

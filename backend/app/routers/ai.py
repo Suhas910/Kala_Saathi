@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from .. import models, schemas, auth
 from ..ai.service import ai_service
+from ..ai import config as ai_config
 
 router = APIRouter(tags=["AI Pipeline"])
 
@@ -106,6 +107,7 @@ def request_price_calculation(
     hours = payload.labour_hours if payload else None
     skill = payload.skill_level if payload else "skilled"
     state = payload.state_code if payload else "KA"
+    comparables = payload.comparables_paise if payload else None
 
     return ai_service.calculate_fair_price(
         listing_id=listing_id,
@@ -113,5 +115,20 @@ def request_price_calculation(
         labour_hours=hours,
         skill_level=skill,
         state_code=state,
+        comparables_paise=comparables,
         db=db
     )
+
+
+# --- AI LAYER CONFIGURATION ---
+@router.get("/ai/config")
+def ai_configuration():
+    """Report which AI implementation is actually serving requests.
+
+    Unauthenticated on purpose. Two implementations share `app/ai/` and one of them
+    returns fixed demo content, so "which one is running right now" must be answerable
+    from outside the process -- during a demo, by whoever is asking whether it is live.
+    A capability whose honesty depends on someone remembering to say so out loud is not
+    an honest capability.
+    """
+    return ai_config.summary()
