@@ -180,4 +180,5 @@ export interface ListingService {
   submitForApproval(listingId: string): Promise<{ status: string }>;
   decideApproval(listingId: string, payload: { decision: string; reason: string }): Promise<{ status: string; reason: string }>;
   requestExport(listingId: string, payload: { target: string; schema_version: string; simulate_network_submission?: boolean }): Promise<ExportResult>;
+  login(role: UserRole): Promise<{ access_token: string; role: UserRole; user_id: string }>;
 }

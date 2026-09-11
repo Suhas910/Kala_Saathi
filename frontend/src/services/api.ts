@@ -5,8 +5,14 @@ import * as SecureStore from 'expo-secure-store';
 import * as Crypto from 'expo-crypto';
 import { useAuthStore } from '../store/authStore';
 
+// LOCAL DEV BACKEND URL CONFIGURATION:
+// To test with a local backend instance (uvicorn app.main:app --reload on port 8000),
+// substitute extra.apiBaseUrl in app.json with:
+// - Android Emulator: http://10.0.2.2:8000/api/v1
+// - iOS Simulator:    http://localhost:8000/api/v1
+// - Physical Device:  http://<your-machine-LAN-IP>:8000/api/v1
 const API_BASE_URL =
-  Constants.expoConfig?.extra?.apiBaseUrl ?? 'https://api.example.com/api/v1'; 
+  Constants.expoConfig?.extra?.apiBaseUrl ?? 'http://LOCAL_DEV_BACKEND_URL/api/v1'; 
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -46,8 +52,13 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       try {
-        // Attempt to get a new token
-        const response = await axios.post(`${API_BASE_URL}/auth/refresh`);
+        // NOTE: Frontend half of silent refresh. Backend /auth/refresh must also accept expired-but-validly-signed tokens (e.g. verify_exp: False with leeway) in backend_branch.
+        const staleToken = await SecureStore.getItemAsync('userToken');
+        const response = await axios.post(
+          `${API_BASE_URL}/auth/refresh`,
+          {},
+          { headers: staleToken ? { Authorization: `Bearer ${staleToken}` } : {} }
+        );
         const newToken = response.data.token;
         
         // Save the new token and update the failed request
@@ -77,6 +88,7 @@ import type {
   CatalogueResult,
   PriceResult,
   ExportResult,
+  UserRole,
 } from '../types/contracts';
 
 export const liveApi: ListingService = {
@@ -118,9 +130,8 @@ export const liveApi: ListingService = {
   },
 
   getImageJobResult: async (jobId: string): Promise<ImageJobResult> => {
-    // NOTE FOR BACKEND TEAM: Contract specifies GET /jobs/{id} returning status.
-    // Clarify if job result is embedded in GET /jobs/{id} upon completion or if
-    // this separate GET /jobs/{id}/result endpoint should be provided.
+    // Confirmed with backend team (backend_branch): GET /jobs/{id}/result is a real,
+    // separate endpoint from GET /jobs/{id} status polling. Shape matches ImageJobResult.
     const res = await api.get(`/jobs/${jobId}/result`);
     return res.data?.result ?? res.data;
   },
@@ -168,5 +179,42 @@ export const liveApi: ListingService = {
     // Aligned to contract: POST /listings/{id}/exports
     const res = await api.post(`/listings/${listingId}/exports`, payload);
     return res.data;
+  },
+
+  login: async (role: UserRole): Promise<{ access_token: string; role: UserRole; user_id: string }> => {
+    // HACKATHON DEMO AUTH: Seeded demo credentials for rapid testing/presentation.
+    // NOTE: This demo-account approach is for hackathon demo purposes only, not a real registration flow,
+    // and should not be presented as the production auth pattern.
+    const DEMO_PASSWORD = 'DemoPassword123!';
+    const username = role === 'coordinator' ? 'coord_demo' : 'artisan_demo';
+    const email = `${username}@karigari.local`;
+
+    try {
+      const res = await api.post('/auth/login', { username, password: DEMO_PASSWORD });
+      const token = res.data.access_token || res.data.token;
+      return {
+        access_token: token,
+        role,
+        user_id: String(res.data.user_id),
+      };
+    } catch (err: any) {
+      // Fallback: If demo account is not registered yet (401/404), register once then retry login
+      if (err.response?.status === 401 || err.response?.status === 404) {
+        await api.post('/auth/register', {
+          username,
+          email,
+          password: DEMO_PASSWORD,
+          role,
+        });
+        const retryRes = await api.post('/auth/login', { username, password: DEMO_PASSWORD });
+        const token = retryRes.data.access_token || retryRes.data.token;
+        return {
+          access_token: token,
+          role,
+          user_id: String(retryRes.data.user_id),
+        };
+      }
+      throw err;
+    }
   },
 };

@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Text, Button, Switch } from 'react-native-paper';
-import { useRoute, useNavigation, type RouteProp } from '@react-navigation/native';
+import { useRoute, useNavigation, useFocusEffect, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import QRCode from 'react-native-qrcode-svg';
 import type { CoordinatorStackParamList } from '../../types/navigation';
@@ -18,11 +18,56 @@ export default function PublishExportScreen() {
 
   const [exportResult, setExportResult] = useState<ExportResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isVerifyingListing, setIsVerifyingListing] = useState(true);
+  const [staleError, setStaleError] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [showJsonPayload, setShowJsonPayload] = useState(false);
   const [simulateBroadcast, setSimulateBroadcast] = useState(false);
 
+  // ITEM 4: Freshness check on focus.
+  // AI_INTERFACE_CONTRACTS.md: Provenance guard must run immediately before export.
+  // Re-fetch listing on screen focus to prevent stale client-side state from bypassing approval or claim verification.
+  useFocusEffect(
+    React.useCallback(() => {
+      let isActive = true;
+      const verifyFreshness = async () => {
+        try {
+          setIsVerifyingListing(true);
+          setStaleError(null);
+          const listing = await service.getListing(listingId);
+          if (!isActive) return;
+
+          // If listing is no longer approved, or contains unverified claims, block export
+          const hasUnverifiedClaims = listing.claims?.some((c) => !c.coordinator_verified);
+          if (listing.state !== 'approved' && listing.state !== 'exported') {
+            setStaleError('Listing status changed — please review again');
+          } else if (hasUnverifiedClaims) {
+            setStaleError('Listing status changed — please review again');
+          }
+        } catch (err) {
+          if (isActive) {
+            setStaleError('Listing status changed — please review again');
+          }
+        } finally {
+          if (isActive) {
+            setIsVerifyingListing(false);
+          }
+        }
+      };
+
+      if (!exportResult) {
+        verifyFreshness();
+      } else {
+        setIsVerifyingListing(false);
+      }
+      return () => {
+        isActive = false;
+      };
+    }, [listingId, exportResult])
+  );
+
   const handleExport = async (overrideSimulation?: boolean) => {
+    if (staleError) return;
     const isSimulating = overrideSimulation !== undefined ? overrideSimulation : simulateBroadcast;
     setLoading(true);
     setExportError(null);
@@ -45,6 +90,10 @@ export default function PublishExportScreen() {
     return <ProcessingIndicator hint="Validating and signing export payload..." />;
   }
 
+  if (isVerifyingListing && !exportResult && !staleError) {
+    return <ProcessingIndicator hint="Verifying listing readiness for export..." />;
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView
@@ -60,7 +109,7 @@ export default function PublishExportScreen() {
         </View>
 
         {/* Pre-Export Initiation Card */}
-        {!exportResult && !exportError && (
+        {!exportResult && !exportError && !staleError && (
           <>
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Ready for Local Gateway Staging</Text>
@@ -88,6 +137,16 @@ export default function PublishExportScreen() {
               </View>
             </View>
           </>
+        )}
+
+        {/* Stale State / Provenance Guard Error */}
+        {staleError && (
+          <ErrorRetryCard
+            asCard
+            errorText={staleError}
+            onRetry={() => navigation.goBack()}
+            retryLabel="Return to Review"
+          />
         )}
 
       {/* Error State with Retry */}
@@ -247,7 +306,7 @@ export default function PublishExportScreen() {
     </ScrollView>
 
     {/* Docked Action Bar */}
-    {!exportResult && !exportError && (
+    {!exportResult && !exportError && !staleError && (
       <BottomDock>
         <Button
           mode="contained"
